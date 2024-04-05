@@ -1,8 +1,7 @@
-*
+**
 !.gitignore
-!config
-config/*
+config/**
 !config/printer.cfg
 !config/shell_command.cfg
-!scripts
-!scripts/*
+!scripts/**
+__pycache__/
