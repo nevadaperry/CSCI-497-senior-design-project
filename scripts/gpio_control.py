@@ -1,10 +1,46 @@
-import curses
-import RPi.GPIO as GPIO
+import RPi
 import signal
 from time import sleep
+from tkinter import *
+from types import SimpleNamespace
+
+dry_run = True
+if (dry_run):
+	GPIO = ({
+		'setmode': lambda mode: None,
+		'BOARD': 0,
+		'setup': lambda pin_num, type: None,
+		'IN': 0,
+		'OUT': 1,
+		'input': lambda: 0,
+		'output': lambda: None
+	})
+	GPIO = SimpleNamespace(**GPIO)
+else:
+	GPIO = RPI.GPIO
 
 GPIO.setmode(GPIO.BOARD)
-valid_io_pins = {3, 5, 7, 8, 10, 11, 12, 13, 15, 16, 18, 19, 21, 22, 23, 24, 26, 29, 31, 32, 33, 35, 36, 37, 38, 40}
+valid_io_pins = {
+	 3,
+	 5,
+	 7,  8,
+	    10,
+	11, 12,
+	13,
+	15, 16,
+	    18,
+	19,
+	21, 22,
+	23, 24,
+	    26,
+	
+	29,
+	31, 32,
+	33,
+	35, 36,
+	37, 38,
+	    40
+}
 pins = {
 	'm1_step': 3,
 	'm1_direction': 5,
@@ -54,59 +90,32 @@ def write_pin(pin, value):
 	output_values[pin] = value
 	GPIO.output(pin, value)
 
-def setup_curses():
-	curses.curs_set(False)
-	curses.start_color()
-	curses.use_default_colors()
-	for i in range(0, curses.COLORS):
-		curses.init_pair(i + 1, i, -1)
-
-def pretty_print(stdscr):
-	col_width = 16
-	screen_rows, screen_cols = stdscr.getmaxyx()
-	base_x = screen_cols // 2 - col_width
-	base_y = screen_rows // 2 - 20 // 2
-	for pin in input_pins:
-		stdscr.addstr(
-			base_y + (pin + 1) // 2,
-			base_x + ((pin + 1) % 2) * col_width,
-			f"[Pin #{pin:02}]: {read_pin(pin)}",
-			curses.color_pair(8)
-		)
-	for pin in output_pins:
-		stdscr.addstr(
-			base_y + (pin + 1) // 2,
-			base_x + ((pin + 1) % 2) * col_width,
-			f"(Pin #{pin:02}): {read_pin(pin)}",
-			curses.color_pair(4)
-		)
-	stdscr.addstr(base_y - 1, base_x, f"Key: [Input pin] ", curses.color_pair(8))
-	stdscr.addstr(f"(Output pin)", curses.color_pair(4))
-	stdscr.refresh()
 
 def cleanup(a, b):
 	for pin in output_pins:
 		write_pin(pin, 0)
 	exit()
-
 signal.signal(signal.SIGINT, cleanup)
 
 steps_remaining = 100
-
-def main(stdscr):
+def update(tk):
 	global steps_remaining
-	setup_pins()
-	setup_curses()
-	while True:
-		if True or steps_remaining > 0:
-			write_pin(pins['m1_direction'], 0)
-			write_pin(pins['m1_step'], +(not read_pin(pins['m1_step'])))
-			steps_remaining -= 0.5
-		write_pin(pins['uv1'], 1)#+(not read_pin(pins['uv1'])))
-		write_pin(pins['uv2'], 1)#+(not read_pin(pins['uv2'])))
-		write_pin(pins['uv3'], 1)#+(not read_pin(pins['uv3'])))
-		write_pin(pins['uv4'], 1)#+(not read_pin(pins['uv4'])))
-		pretty_print(stdscr)
-		curses.napms(100)
+	if steps_remaining > 0:
+		write_pin(pins['m1_direction'], 0)
+		write_pin(pins['m1_step'], +(not read_pin(pins['m1_step'])))
+		steps_remaining -= 0.5
+	write_pin(pins['uv1'], 1)#+(not read_pin(pins['uv1'])))
+	write_pin(pins['uv2'], 1)#+(not read_pin(pins['uv2'])))
+	write_pin(pins['uv3'], 1)#+(not read_pin(pins['uv3'])))
+	write_pin(pins['uv4'], 1)#+(not read_pin(pins['uv4'])))
+	#curses_print(stdscr)
+	#curses.napms(100)
+	tk.after(100, update)
 
-curses.wrapper(main)
+def main():
+	setup_pins()
+	tk = Tk()
+	tk.after(0, update)
+	tk.mainloop()
+
+main()
