@@ -1,9 +1,10 @@
-import signal
+from signal import SIGINT, signal
 from types import SimpleNamespace
 from typing import Dict, Literal, TypedDict
 
-gpio_available = False
-if (gpio_available):
+GPIO_AVAILABLE = False
+'''Set this to False to run/debug this script on devices other than RPi'''
+if (GPIO_AVAILABLE):
 	import RPi.GPIO as GPIO
 else:
 	GPIO = ({
@@ -17,15 +18,16 @@ else:
 	})
 	GPIO = SimpleNamespace(**GPIO)
 
-valid_io_pins = {
+VALID_IO_PINS = {
 	         8, 10, 12,     16, 18,     22, 24, 26,         32,     36, 38, 40,
 	 3,  5,  7,     11, 13, 15,     19, 21, 23,         29, 31, 33, 35, 37,
 }
 
+PinValue = Literal[0, 1]
 class Pin(TypedDict):
 	number: int
 	type: Literal['input', 'output']
-	value: Literal[0, 1]
+	value: PinValue
 
 pins: Dict[str, Pin] = {
 	'rotator_step': { 'number': 3, 'type': 'output' },
@@ -56,7 +58,7 @@ pins: Dict[str, Pin] = {
 	'unused40': { 'number': 40, 'type': 'output' },
 }
 
-def read_pin(pin_label):
+def read_pin(pin_label: str):
 	if not pin_label in pins:
 		raise Exception(f"Tried to read from unknown pin {pin_label}")
 	pin = pins[pin_label]
@@ -64,12 +66,11 @@ def read_pin(pin_label):
 	if pin['type'] == 'input':
 		return GPIO.input(pin['number'])
 	elif pin['type'] == 'output':
-		value = pin['value']
-		if not value:
+		if not 'value' in pin:
 			raise Exception(f"No value found for output pin {pin_label}")
-		return value
+		return pin['value']
 
-def write_pin(pin_label, value):
+def write_pin(pin_label: str, value: PinValue):
 	if not pin_label in pins:
 		raise Exception(f"Tried to read from unknown pin {pin_label}")
 	pin = pins[pin_label]
@@ -79,21 +80,23 @@ def write_pin(pin_label, value):
 	pins[pin_label]['value'] = value
 	GPIO.output(pins[pin_label], value)
 
-def cleanup(a, b):
+def cleanup(signal, frame):
 	for pin_label, pin in pins.items():
 		write_pin(pin_label, 0)
 	exit()
 
 def setup_pins():
 	GPIO.setmode(GPIO.BOARD)
-	signal.signal(signal.SIGINT, cleanup)
+	signal(SIGINT, cleanup)
 	for pin_label, pin in pins.items():
+		if not pin['number'] in VALID_IO_PINS:
+			raise Exception(f"Unknown pin number {pin['number']} in setup_pins")
 		if pin['type'] == 'input':
 			GPIO.setup(pin['number'], GPIO.IN)
 		elif pin['type'] == 'output':
 			GPIO.setup(pin['number'], GPIO.OUT)
-			starting_value = 0
+			starting_value: PinValue = 0
 			GPIO.output(pin['number'], starting_value)
 			pin['value'] = starting_value
 		else:
-			raise Exception(f"Unknown pin type {pin['type']} in setup_pins()")
+			raise Exception(f"Unknown pin type {pin['type']} in setup_pins")

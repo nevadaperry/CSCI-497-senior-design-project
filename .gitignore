@@ -1,5 +1,6 @@
 **
 !.gitignore
+!Readme.md
 config/**
 !config/printer.cfg
 !config/shell_command.cfg
