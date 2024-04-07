@@ -4,5 +4,6 @@
 config/**
 !config/printer.cfg
 !config/shell_command.cfg
+!scripts
 !scripts/**
 __pycache__/
