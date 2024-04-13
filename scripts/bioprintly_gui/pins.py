@@ -3,7 +3,10 @@ from types import SimpleNamespace
 from typing import Dict, Literal, TypedDict, cast
 
 GPIO_AVAILABLE = False
-'''Set this to False to run/debug this script on devices other than RPi'''
+'''
+Set this to False to test/debug this script on devices other than Raspberry Pi,
+with all GPIO inputs reading 0 and all outputs having no effect.
+'''
 if (GPIO_AVAILABLE):
 	import RPi.GPIO as GPIO # type: ignore
 else:
