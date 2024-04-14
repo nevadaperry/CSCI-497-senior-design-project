@@ -9,9 +9,11 @@ class Pin(TypedDict):
 	type: Literal['input', 'output']
 	value: NotRequired[Bit]
 
+SyringeNumber = Literal[0, 1, 2, 3]
+
 class CommandRotate(TypedDict):
 	verb: Literal['Rotate']
-	target_syringe: int
+	target_syringe: SyringeNumber
 	direction: NotRequired[Bit]
 	half_steps_remaining: NotRequired[int]
 class CommandActuate(TypedDict):
@@ -36,7 +38,7 @@ class GlobalState(TypedDict):
 	pins: Dict[str, Pin]
 	command_queue: list[Command]
 	command_history: list[Command]
-	selected_syringe: Literal[0, 1, 2, 3]
+	selected_syringe: SyringeNumber
 	'''
 	Also decides command processing interval, until we have a separate service
 	or thread for command processing.

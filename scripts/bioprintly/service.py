@@ -22,7 +22,7 @@ def process_commands(state: GlobalState):
 		return
 	
 	active_command = state['command_queue'][0]
-	if 'started_at':
+	if not 'started_at' in active_command:
 		active_command['started_at'] = time_ms()
 	
 	specifics = active_command['specifics']
@@ -39,6 +39,7 @@ def process_commands(state: GlobalState):
 				specifics['half_steps_remaining'] = 2 * abs(raw_steps_required)
 			
 			if specifics['half_steps_remaining'] == 0:
+				state['selected_syringe'] = specifics['target_syringe']
 				finish_active_task(state)
 				return
 			write_pin(state, 'rotator_direction', specifics['direction'])

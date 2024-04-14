@@ -20,10 +20,11 @@ def setup_gui(state: GlobalState):
 	)
 	
 	gui_elements = build_gui_layout(gui_root, state)
+	
 	cached_trigger_values = {}
 	gui_root.after(
 		0,
-		update_gui,
+		update_gui_repeatedly,
 		gui_root,
 		gui_elements,
 		state,
@@ -31,12 +32,17 @@ def setup_gui(state: GlobalState):
 	)
 	gui_root.mainloop()
 
-def update_gui(
+def update_gui_repeatedly(
 	gui_root: Tk,
 	gui_elements: Dict[str, GuiElement],
 	state: GlobalState,
-	cached_trigger_values,
+	cached_trigger_values: Dict[str, str],
 ):
+	'''
+	Update GUI elements based on triggers, where each element's update function
+	will be run if its trigger value has changed. Similar to useEffect/useMemo
+	from React if you're familiar with that.
+	'''
 	gui_update_start_time = time_ms()
 	
 	for name, gui_element in gui_elements.items():
@@ -61,10 +67,10 @@ def update_gui(
 	gui_root.after(
 		max(
 			0,
-			# 30 fps or less
-			floor(1000 / 30) - (time_ms() - gui_update_start_time),
+			# 60 fps or so
+			floor(1000 / 60) - (time_ms() - gui_update_start_time),
 		),
-		update_gui,
+		update_gui_repeatedly,
 		gui_root,
 		gui_elements,
 		state,

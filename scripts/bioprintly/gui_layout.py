@@ -83,6 +83,26 @@ def build_gui_layout(
 				}'''),
 			)),
 		},
+		'switch_to_syringe_0_button': {
+			'element': (lambda: (
+				element := ttk.Button(
+					gui_root,
+					text = 'Switch to syringe 0',
+					command = lambda: (
+						state['command_queue'].append({
+							'enqueued_at': time_ms(),
+							'specifics': {
+								'verb': 'Rotate',
+								'target_syringe': 0,
+							},
+						}),
+					),
+				),
+				element.pack(),
+				element,
+			))()[-1],
+			'update': lambda element: None,
+		},
 		'switch_to_syringe_1_button': {
 			'element': (lambda: (
 				element := ttk.Button(
@@ -94,6 +114,46 @@ def build_gui_layout(
 							'specifics': {
 								'verb': 'Rotate',
 								'target_syringe': 1,
+							},
+						}),
+					),
+				),
+				element.pack(),
+				element,
+			))()[-1],
+			'update': lambda element: None,
+		},
+		'switch_to_syringe_2_button': {
+			'element': (lambda: (
+				element := ttk.Button(
+					gui_root,
+					text = 'Switch to syringe 2',
+					command = lambda: (
+						state['command_queue'].append({
+							'enqueued_at': time_ms(),
+							'specifics': {
+								'verb': 'Rotate',
+								'target_syringe': 2,
+							},
+						}),
+					),
+				),
+				element.pack(),
+				element,
+			))()[-1],
+			'update': lambda element: None,
+		},
+		'switch_to_syringe_3_button': {
+			'element': (lambda: (
+				element := ttk.Button(
+					gui_root,
+					text = 'Switch to syringe 3',
+					command = lambda: (
+						state['command_queue'].append({
+							'enqueued_at': time_ms(),
+							'specifics': {
+								'verb': 'Rotate',
+								'target_syringe': 3,
 							},
 						}),
 					),
