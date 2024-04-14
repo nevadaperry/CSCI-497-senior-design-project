@@ -1,40 +1,39 @@
 import json
-from math import floor
 from os import environ
 from pathlib import Path
-from time import time_ns
-from typing import Dict, Literal, TypedDict
+from typing import Dict, Literal, NotRequired, TypedDict
+from util import Bit
 
-class CommandRotate(TypedDict):
-	verb: Literal['Rotate']
-	direction: Literal['Counterclockwise', 'Clockwise']
-	steps_needed_total: int
-	half_steps_remaining: int
-class CommandActuate(TypedDict):
-	verb: Literal['Actuate']
-	direction: Literal['Out', 'In']
-	steps_needed_total: int
-	half_steps_remaining: int
-class Command(TypedDict):
-	enqueued_at: int
-	'''Unix epoch milliseconds'''
-	started_at: int | None
-	finished_at: int | None
-	specifics: CommandRotate
-
-Binary = Literal[0, 1]
 class Pin(TypedDict):
 	number: int
 	type: Literal['input', 'output']
-	value: Binary | None
+	value: NotRequired[Bit]
+
+class CommandRotate(TypedDict):
+	verb: Literal['Rotate']
+	target_syringe: int
+	direction: NotRequired[Bit]
+	half_steps_remaining: NotRequired[int]
+class CommandActuate(TypedDict):
+	verb: Literal['Actuate']
+	direction: Bit
+	steps_needed_total: int
+	half_steps_remaining: NotRequired[int]
+class Command(TypedDict):
+	enqueued_at: int
+	'''Unix epoch milliseconds'''
+	started_at: NotRequired[int]
+	finished_at: NotRequired[int]
+	specifics: CommandRotate
 
 class GlobalState(TypedDict):
 	savefile_path: str
-	pins: Dict[str, Pin]
+	gui_on: bool
 	service_on: bool
-	service_timestep_ms: int
-	last_service_loop_start: int
-	service_delta_ms: int
+	service_loop_interval: int
+	service_loop_last_start: int
+	service_loop_measured_delta: int
+	pins: Dict[str, Pin]
 	command_queue: list[Command]
 	command_history: list[Command]
 	selected_syringe: Literal[0, 1, 2, 3]
@@ -43,9 +42,6 @@ class GlobalState(TypedDict):
 	or thread for command processing.
 	'''
 	rotator_steps_equivalent_to_90_degrees: int
-
-def time_ms() -> int:
-	return floor(time_ns() / 1e6)
 
 def establish_savefile_path() -> str:
 	if environ.get('XDG_DATA_DIR'):
@@ -60,23 +56,6 @@ def establish_savefile_path() -> str:
 	Path(savefolder_path).mkdir(parents = True, exist_ok = True)
 	return f'{savefolder_path}/state.json'
 
-def build_default_global_state() -> GlobalState:
-	return {
-		'savefile_path': establish_savefile_path(),
-		'service_on': False,
-		'service_timestep_ms': 8,
-		'last_service_loop_start': 0,
-		'service_delta_ms': 0,
-		'pins': {
-			'rotator_step': { 'number': 3, 'type': 'output', 'value': 0 },
-			'rotator_direction': { 'number': 5, 'type': 'output', 'value': 0 },
-		},
-		'command_queue': [],
-		'command_history': [],
-		'selected_syringe': 1,
-		'rotator_steps_equivalent_to_90_degrees': 235,
-	}
-
 def save_state_to_disk(state: GlobalState):
 	savefile = open(state['savefile_path'], 'w')
 	json.dump(state, savefile, indent = "\t")
@@ -87,3 +66,29 @@ def load_state_from_disk(state: GlobalState):
 	for key, value in savedata.items():
 		if key in state:
 			state[key] = value
+
+def get_initial_global_state() -> GlobalState:
+	state: GlobalState = {
+		'savefile_path': establish_savefile_path(),
+		'gui_on': True,
+		'service_on': False,
+		'service_loop_interval': 8,
+		'service_loop_last_start': 0,
+		'service_loop_measured_delta': 0,
+		'pins': {
+			'rotator_step': { 'number': 3, 'type': 'output', 'value': 0 },
+			'rotator_direction': { 'number': 5, 'type': 'output', 'value': 0 },
+		},
+		'command_queue': [],
+		'command_history': [],
+		'selected_syringe': 1,
+		'rotator_steps_equivalent_to_90_degrees': 235,
+	}
+	
+	try:
+		load_state_from_disk(state)
+		state['gui_on'] = True
+	except:
+		pass
+	
+	return state
