@@ -1,4 +1,5 @@
 import json
+from math import floor
 from os import environ
 from pathlib import Path
 from typing import Dict, Literal, NotRequired, TypedDict
@@ -9,7 +10,7 @@ class Pin(TypedDict):
 	type: Literal['input', 'output']
 	value: NotRequired[Bit]
 
-SyringeNumber = Literal[0, 1, 2, 3]
+SyringeNumber = Literal[1, 2, 3, 4]
 
 class CommandRotate(TypedDict):
 	verb: Literal['Rotate']
@@ -31,6 +32,7 @@ class Command(TypedDict):
 class GlobalState(TypedDict):
 	savefile_path: str
 	gui_on: bool
+	gui_loop_interval: int
 	service_on: bool
 	service_loop_interval: int
 	service_loop_last_start: int
@@ -39,10 +41,6 @@ class GlobalState(TypedDict):
 	command_queue: list[Command]
 	command_history: list[Command]
 	selected_syringe: SyringeNumber
-	'''
-	Also decides command processing interval, until we have a separate service
-	or thread for command processing.
-	'''
 	rotator_steps_equivalent_to_90_degrees: int
 
 def establish_savefile_path() -> str:
@@ -66,6 +64,8 @@ def load_state_from_disk(state: GlobalState):
 	savefile = open(state['savefile_path'], 'r')
 	savedata = json.load(savefile)
 	for key, value in savedata.items():
+		if key in ['savefile_path', 'gui_on', 'gui_loop_interval']:
+			continue
 		if key in state:
 			state[key] = value
 
@@ -73,6 +73,7 @@ def get_initial_global_state() -> GlobalState:
 	state: GlobalState = {
 		'savefile_path': establish_savefile_path(),
 		'gui_on': True,
+		'gui_loop_interval': floor(1000 / 5), # 5 fps or so
 		'service_on': False,
 		'service_loop_interval': 8,
 		'service_loop_last_start': 0,
@@ -89,7 +90,6 @@ def get_initial_global_state() -> GlobalState:
 	
 	try:
 		load_state_from_disk(state)
-		state['gui_on'] = True
 	except:
 		pass
 	

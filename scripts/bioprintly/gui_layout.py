@@ -6,11 +6,6 @@ from util import set_value, time_ms
 
 class GuiElement(TypedDict):
 	element: tkinter.Widget | ttk.Widget
-	update_trigger: NotRequired[Tuple[Any, str]]
-	'''
-	Tuple of (dict, key), where dict[key] is the value that should trigger an
-	update if it changes. Uses shallow comparison.
-	'''
 	update: Callable[[tkinter.Widget | ttk.Widget], Any]
 	'''
 	Update function. Will be run at least once.
@@ -35,7 +30,6 @@ def build_gui_layout(
 				element.pack(),
 				element,
 			))()[-1],
-			'update_trigger': (state, 'service_on'),
 			'update': lambda element: (
 				element := cast(tkinter.Checkbutton, element),
 				element.select() if state['service_on'] else element.deselect(),
@@ -47,7 +41,6 @@ def build_gui_layout(
 				element.pack(),
 				element,
 			))()[-1],
-			'update_trigger': (state, 'service_loop_interval'),
 			'update': (lambda element: (
 				element := cast(ttk.Label, element),
 				element.config(text = f'''Processing interval in ms: {
@@ -61,10 +54,9 @@ def build_gui_layout(
 				element.pack(),
 				element,
 			))()[-1],
-			'update_trigger': (state, 'service_loop_measured_delta'),
 			'update': (lambda element: (
 				element := cast(ttk.Label, element),
-				element.config(text = f'''Processing measured delta in ms: {
+				element.config(text = f'''Measured delta in ms: {
 					str(state['service_loop_measured_delta']).zfill(2)
 				}'''),
 			)),
@@ -75,33 +67,12 @@ def build_gui_layout(
 				element.pack(),
 				element,
 			))()[-1],
-			'update_trigger': (state, 'selected_syringe'),
 			'update': (lambda element: (
 				element := cast(ttk.Label, element),
 				element.config(text = f'''Selected syringe: {
 					state['selected_syringe']
 				}'''),
 			)),
-		},
-		'switch_to_syringe_0_button': {
-			'element': (lambda: (
-				element := ttk.Button(
-					gui_root,
-					text = 'Switch to syringe 0',
-					command = lambda: (
-						state['command_queue'].append({
-							'enqueued_at': time_ms(),
-							'specifics': {
-								'verb': 'Rotate',
-								'target_syringe': 0,
-							},
-						}),
-					),
-				),
-				element.pack(),
-				element,
-			))()[-1],
-			'update': lambda element: None,
 		},
 		'switch_to_syringe_1_button': {
 			'element': (lambda: (
@@ -163,13 +134,32 @@ def build_gui_layout(
 			))()[-1],
 			'update': lambda element: None,
 		},
+		'switch_to_syringe_4_button': {
+			'element': (lambda: (
+				element := ttk.Button(
+					gui_root,
+					text = 'Switch to syringe 4',
+					command = lambda: (
+						state['command_queue'].append({
+							'enqueued_at': time_ms(),
+							'specifics': {
+								'verb': 'Rotate',
+								'target_syringe': 4,
+							},
+						}),
+					),
+				),
+				element.pack(),
+				element,
+			))()[-1],
+			'update': lambda element: None,
+		},
 		'command_queue': {
 			'element': (lambda: (
 				element := ttk.Label(gui_root),
 				element.pack(),
 				element,
 			))()[-1],
-			'update_trigger': (state, 'command_queue'),
 			'update': (lambda element: (
 				element := cast(ttk.Label, element),
 				element.config(text = f'Command queue:\n{'\n'.join(list(map(
@@ -196,7 +186,6 @@ def build_gui_layout(
 				element.pack(),
 				element,
 			))()[-1],
-			'update_trigger': (state, 'command_history'),
 			'update': (lambda element: (
 				element := cast(ttk.Label, element),
 				element.config(text = f'Command history:\n{'\n'.join(list(map(
