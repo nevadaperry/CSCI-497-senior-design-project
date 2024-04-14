@@ -1,19 +1,15 @@
 from pins import setup_pins, zero_out_pins_and_exit
-from process import process_commands
+from service import run_service
 from state import GlobalState, build_default_global_state, load_state_from_disk, save_state_to_disk, time_ms
+from threading import Timer
+import tkinter
 from tkinter import Tk, ttk, messagebox
-from tkinter.ttk import Button, Label
-from typing import Any, Callable, Dict, TypedDict
+from typing import Any, Callable, Dict, TypedDict, cast
+from util import set_value
 
-Widget = Button | Label
-'''
-Although Python 3.11 supports using Generic[T] with TypedDict, Pylance (for type
-checking in VSCode) does not support it yet. Instead, we replace Widget with a
-union of the Widget types that we use as a faux-generic.
-'''
 class GuiElement(TypedDict):
-	element: Widget
-	update: Callable[[Widget], Any]
+	element: tkinter.Widget | ttk.Widget
+	update: Callable[[tkinter.Widget | ttk.Widget], Any]
 
 def build_gui_layout(
 	gui_root: Tk,
@@ -23,33 +19,65 @@ def build_gui_layout(
 	gui_root.geometry('1280x720')
 	
 	return {
-		'update_delta': {
+		'service_on_off_switch': {
 			'element': (lambda: (
-				element := Label(gui_root),
+				element := tkinter.Checkbutton(
+					gui_root,
+					text = 'Enable processing',
+					command = lambda: (
+						set_value(state, 'service_on', not state['service_on']),
+					),
+				),
+				element.pack(),
+				element,
+			))()[-1],
+			'update': lambda element: (
+				element := cast(tkinter.Checkbutton, element),
+				element.select() if state['service_on'] else element.deselect(),
+			),
+		},
+		'service_timestep': {
+			'element': (lambda: (
+				element := ttk.Label(gui_root),
 				element.pack(),
 				element,
 			))()[-1],
 			'update': (lambda element: (
-				element.config(text = f'''Update delta in ms: {
-					state['update_delta_ms']
+				element := cast(ttk.Label, element),
+				element.config(text = f'''Service timestep in ms: {
+					state['service_timestep_ms']
+				}'''),
+			)),
+		},
+		'service_delta': {
+			'element': (lambda: (
+				element := ttk.Label(gui_root),
+				element.pack(),
+				element,
+			))()[-1],
+			'update': (lambda element: (
+				element := cast(ttk.Label, element),
+				element.config(text = f'''Service delta in ms: {
+					state['service_delta_ms']
 				}'''),
 			)),
 		},
 		'selected_syringe': {
 			'element': (lambda: (
-				element := Label(gui_root),
+				element := ttk.Label(gui_root),
 				element.pack(),
 				element,
 			))()[-1],
 			'update': (lambda element: (
+				element := cast(ttk.Label, element),
 				element.config(text = f'''Selected syringe: {
 					state['selected_syringe']
 				}'''),
 			)),
 		},
-		'button_to_enqueue_rotate': {
+		'enqueue_rotate_button': {
 			'element': (lambda: (
-				element := Button(
+				element := ttk.Button(
 					gui_root,
 					text = 'Rotate 90º clockwise',
 					command = lambda: (
@@ -68,7 +96,7 @@ def build_gui_layout(
 								],
 							},
 						}),
-					)
+					),
 				),
 				element.pack(),
 				element,
@@ -77,11 +105,12 @@ def build_gui_layout(
 		},
 		'command_queue': {
 			'element': (lambda: (
-				element := Label(gui_root),
+				element := ttk.Label(gui_root),
 				element.pack(),
 				element,
 			))()[-1],
 			'update': (lambda element: (
+				element := cast(ttk.Label, element),
 				element.config(text = f'Command queue:\n{'\n'.join(list(map(
 					lambda command: str(command),
 					state['command_queue'],
@@ -90,11 +119,12 @@ def build_gui_layout(
 		},
 		'command_history': {
 			'element': (lambda: (
-				element := Label(gui_root),
+				element := ttk.Label(gui_root),
 				element.pack(),
 				element,
 			))()[-1],
 			'update': (lambda element: (
+				element := cast(ttk.Label, element),
 				element.config(text = f'Command history:\n{'\n'.join(list(map(
 					lambda command: str(command),
 					state['command_history'],
@@ -108,35 +138,36 @@ def update_gui(
 	gui_elements: Dict[str, GuiElement],
 	state: GlobalState,
 ):
-	update_start_time = time_ms()
-	state['update_delta_ms'] = update_start_time - state['last_update_start_time']
-	
-	process_commands(state)
+	gui_update_start_time = time_ms()
 	
 	for name, gui_element in gui_elements.items():
 		gui_element['update'](gui_element['element'])
 	
-	# Schedule another GUI update to run after up to gui_update_interval_ms
-	state['last_update_start_time'] = time_ms()
 	gui_root.after(
 		max(
 			0,
-			state['gui_update_interval_ms']
-				- (time_ms() - update_start_time),
+			# 62.5 fps or less
+			16 - (time_ms() - gui_update_start_time),
 		),
 		update_gui,
 		gui_root,
 		gui_elements,
-		state,
+		state
 	)
 
-def confirm_close_gui(gui_root, state):
+def confirm_close_gui(state):
 	if messagebox.askokcancel(
 		'Are you sure?',
 		'Are you sure you want to close? This will save the current state and stop command processing.',
 	):
 		save_state_to_disk(state)
 		zero_out_pins_and_exit(state)
+
+def setup_close_handlers(gui_root: Tk, state: GlobalState):
+	gui_root.protocol(
+		"WM_DELETE_WINDOW",
+		lambda: confirm_close_gui(state)
+	)
 
 def setup_gui():
 	gui_root = Tk()
@@ -151,12 +182,10 @@ def setup_gui():
 	except:
 		pass
 	setup_pins(state)
+	setup_close_handlers(gui_root, state)
 	
-	gui_root.protocol(
-		"WM_DELETE_WINDOW",
-		lambda gui_root = gui_root: confirm_close_gui(gui_root, state)
-	)
 	gui_elements = build_gui_layout(gui_root, state)
+	Timer(0, run_service, [state]).start()
 	gui_root.after(0, update_gui, gui_root, gui_elements, state)
 	gui_root.mainloop()
 

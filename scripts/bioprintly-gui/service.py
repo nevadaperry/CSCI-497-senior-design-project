@@ -1,3 +1,5 @@
+from threading import Timer
+from time import sleep
 from pins import flip_binary, read_pin, write_pin
 from state import GlobalState, save_state_to_disk, time_ms
 
@@ -14,7 +16,6 @@ def process_commands(state: GlobalState):
 	active_command = state['command_queue'][0]
 	if active_command['started_at'] == None:
 		active_command['started_at'] = time_ms()
-	save_state_to_disk(state)
 	
 	specifics = active_command['specifics']
 	match specifics['verb']:
@@ -36,3 +37,18 @@ def process_commands(state: GlobalState):
 				read_pin(state, 'actuator_step')
 			))
 			specifics['half_steps_remaining'] -= 1
+
+def run_service(state: GlobalState):
+	while True:
+		loop_start_time = time_ms()
+		state['service_delta_ms'] =\
+			loop_start_time - state['last_service_loop_start']
+		
+		if state['service_on']:
+			process_commands(state)
+		
+		state['last_service_loop_start'] = time_ms()
+		sleep(max(
+			0,
+			state['service_timestep_ms'] - (time_ms() - loop_start_time)
+		) / 1e3)

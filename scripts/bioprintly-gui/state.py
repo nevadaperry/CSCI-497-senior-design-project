@@ -29,14 +29,15 @@ class Pin(TypedDict):
 	value: Binary | None
 
 class GlobalState(TypedDict):
-	last_update_start_time: int
-	update_delta_ms: int
 	savefile_path: str
 	pins: Dict[str, Pin]
+	service_on: bool
+	service_timestep_ms: int
+	last_service_loop_start: int
+	service_delta_ms: int
 	command_queue: list[Command]
 	command_history: list[Command]
 	selected_syringe: Literal[0, 1, 2, 3]
-	gui_update_interval_ms: int
 	'''
 	Also decides command processing interval, until we have a separate service
 	or thread for command processing.
@@ -61,9 +62,11 @@ def establish_savefile_path() -> str:
 
 def build_default_global_state() -> GlobalState:
 	return {
-		'last_update_start_time': 0,
-		'update_delta_ms': 0,
 		'savefile_path': establish_savefile_path(),
+		'service_on': False,
+		'service_timestep_ms': 8,
+		'last_service_loop_start': 0,
+		'service_delta_ms': 0,
 		'pins': {
 			'rotator_step': { 'number': 3, 'type': 'output', 'value': 0 },
 			'rotator_direction': { 'number': 5, 'type': 'output', 'value': 0 },
@@ -71,7 +74,6 @@ def build_default_global_state() -> GlobalState:
 		'command_queue': [],
 		'command_history': [],
 		'selected_syringe': 1,
-		'gui_update_interval_ms': 1, # 125 hz
 		'rotator_steps_equivalent_to_90_degrees': 235,
 	}
 

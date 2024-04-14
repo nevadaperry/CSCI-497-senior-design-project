@@ -1,4 +1,3 @@
-from signal import SIGINT, signal
 from types import SimpleNamespace
 from state import GlobalState, Binary
 from typing import cast
@@ -25,7 +24,7 @@ except:
 def flip_binary(value: Binary) -> Binary:
 	return cast(Binary, +(not value))
 
-def read_pin(state: GlobalState, pin_label: str) -> Binary:	
+def read_pin(state: GlobalState, pin_label: str) -> Binary:
 	if not pin_label in state['pins']:
 		raise Exception(f'Tried to read from unknown pin {pin_label}')
 	pin = state['pins'][pin_label]
@@ -56,10 +55,6 @@ def zero_out_pins_and_exit(state: GlobalState):
 
 def setup_pins(state: GlobalState):
 	GPIO.setmode(GPIO.BOARD)
-	signal(
-		SIGINT,
-		lambda signal, frame, state = state: zero_out_pins_and_exit(state)
-	)
 	for pin_label, pin in state['pins'].items():
 		if not pin['number'] in VALID_IO_PINS:
 			raise Exception(f'Unknown pin number {pin['number']} in setup_pins')
