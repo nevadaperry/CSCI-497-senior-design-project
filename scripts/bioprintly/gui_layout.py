@@ -1,8 +1,8 @@
 import json
-from state import GlobalState, SyringeNumber
+from state import GlobalState, PinNumber, SyringeNumber
 import tkinter
 from tkinter import Tk, ttk
-from typing import Any, Callable, Dict, List, Mapping, TypedDict, cast
+from typing import Any, Callable, Dict, List, Mapping, TypedDict, cast, get_args
 from util import set_value, time_ms
 
 class GuiElement(TypedDict):
@@ -13,10 +13,8 @@ def build_gui_layout(
 	gui_root: Tk,
 	state: GlobalState
 ) -> Dict[str, GuiElement]:
-	gui_root.grid_rowconfigure(0, weight=1)
-	gui_root.grid_columnconfigure(0, weight=1)
-	gui_root.grid_columnconfigure(1, weight=1)
-	gui_root.grid_columnconfigure(2, weight=1)
+	gui_root.grid_rowconfigure(0, weight = 1)
+	map(lambda i: gui_root.grid_columnconfigure(i, weight = 1), [0, 1, 2])
 	
 	left_column = ttk.Frame(gui_root)
 	left_column.grid(row = 0, column = 0)
@@ -98,19 +96,32 @@ def build_gui_layout(
 							}),
 						),
 					)),
-					cast(List[SyringeNumber], [0, 1, 2, 3]),
+					cast(List[SyringeNumber], [1, 2, 3, 4]),
 				)),
 				[button.pack() for button in buttons.values()],
 				buttons,
 			))()[-1],
 			'update': lambda widgets: None,
 		},
+		'pin_mappings': {
+			'widgets': (lambda: (
+				combobox := ttk.Combobox(
+					left_column,
+					state = 'readonly',
+					values = sorted(get_args(PinNumber)),
+				),
+				combobox.pack(),
+				{ 'combobox': combobox },
+			))()[-1],
+			'update': (lambda widgets: (
+				combobox := cast(ttk.Combobox, widgets['combobox']),
+			)),
+		},
 		'command_queue': {
 			'widgets': (lambda: (
 				frame := ttk.Frame(middle_column),
 				frame.pack(fill = 'both', expand = True),
-				
-				text := tkinter.Text(frame),#, wrap = 'none'),
+				text := tkinter.Text(frame),
 				text.config(state = tkinter.NORMAL),
 				text.pack(),
 				{ 'frame': frame, 'text': text },
@@ -143,8 +154,7 @@ def build_gui_layout(
 			'widgets': (lambda: (
 				frame := ttk.Frame(right_column),
 				frame.pack(fill = 'both', expand = True),
-				
-				text := tkinter.Text(frame),#, wrap = 'none'),
+				text := tkinter.Text(frame),
 				text.config(state = tkinter.NORMAL),
 				text.pack(),
 				{ 'frame': frame, 'text': text },

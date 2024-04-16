@@ -2,11 +2,15 @@ import json
 from math import floor
 from os import environ
 from pathlib import Path
-from typing import Dict, Literal, NotRequired, TypedDict
+from typing import Dict, Literal, NotRequired, Tuple, Type, TypedDict, Union
 from util import Bit
 
+PinNumber = Literal[
+	         8, 10, 12,     16, 18,     22, 24, 26,         32,     36, 38, 40,
+	 3,  5,  7,     11, 13, 15,     19, 21, 23,         29, 31, 33, 35, 37,
+]
 class Pin(TypedDict):
-	number: int
+	number: PinNumber
 	type: Literal['input', 'output']
 	value: NotRequired[Bit]
 

@@ -1,12 +1,7 @@
-from state import GlobalState
+from state import GlobalState, PinNumber
 from types import SimpleNamespace
-from typing import cast
+from typing import cast, get_args
 from util import Bit
-
-VALID_IO_PINS = {
-	         8, 10, 12,     16, 18,     22, 24, 26,         32,     36, 38, 40,
-	 3,  5,  7,     11, 13, 15,     19, 21, 23,         29, 31, 33, 35, 37,
-}
 
 try:
 	GPIO = __import__('RPi').GPIO
@@ -26,12 +21,12 @@ def setup_pins(state: GlobalState):
 	'''Can be rerun idempotently'''
 	GPIO.setmode(GPIO.BOARD)
 	# Turn off all pins in case any were unmapped, or left turned on externally
-	for pin_number in VALID_IO_PINS:
+	for pin_number in get_args(PinNumber):
 		GPIO.setup(pin_number, GPIO.OUT)
 		GPIO.output(pin_number, 0)
 	
 	for pin_label, pin in state['pins'].items():
-		if not pin['number'] in VALID_IO_PINS:
+		if not pin['number'] in get_args(PinNumber):
 			raise Exception(f'Unknown pin number {pin['number']} in setup_pins')
 		if pin['type'] == 'input':
 			GPIO.setup(pin['number'], GPIO.IN)
