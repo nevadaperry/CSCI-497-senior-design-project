@@ -1,197 +1,167 @@
-from state import GlobalState
+import json
+from state import GlobalState, SyringeNumber
 import tkinter
 from tkinter import Tk, ttk
-from typing import Any, Callable, Dict, List, NotRequired, Tuple, TypedDict, cast
+from typing import Any, Callable, Dict, List, Mapping, TypedDict, cast
 from util import set_value, time_ms
 
 class GuiElement(TypedDict):
-	element: tkinter.Widget | ttk.Widget
-	update: Callable[[tkinter.Widget | ttk.Widget], Any]
-	'''
-	Update function. Will be run at least once.
-	'''
+	widgets: Mapping[str, tkinter.Widget | ttk.Widget]
+	update: Callable[[Mapping[str, tkinter.Widget | ttk.Widget]], Any]
 
 def build_gui_layout(
 	gui_root: Tk,
 	state: GlobalState
 ) -> Dict[str, GuiElement]:
-	gui_root.state('zoomed')
+	gui_root.grid_rowconfigure(0, weight=1)
+	gui_root.grid_columnconfigure(0, weight=1)
+	gui_root.grid_columnconfigure(1, weight=1)
+	gui_root.grid_columnconfigure(2, weight=1)
+	
+	left_column = ttk.Frame(gui_root)
+	left_column.grid(row = 0, column = 0)
+	middle_column = ttk.Frame(gui_root)
+	middle_column.grid(row = 0, column = 1)
+	right_column = ttk.Frame(gui_root)
+	right_column.grid(row = 0, column = 2)
 	
 	return {
 		'service_on_off_switch': {
-			'element': (lambda: (
-				element := tkinter.Checkbutton(
-					gui_root,
+			'widgets': (lambda: (
+				switch := tkinter.Checkbutton(
+					left_column,
 					text = 'Enable processing',
 					command = lambda: (
 						set_value(state, 'service_on', not state['service_on']),
 					),
 				),
-				element.pack(),
-				element,
+				switch.pack(),
+				{ 'switch': switch },
 			))()[-1],
-			'update': lambda element: (
-				element := cast(tkinter.Checkbutton, element),
-				element.select() if state['service_on'] else element.deselect(),
+			'update': lambda widgets: (
+				switch := cast(tkinter.Checkbutton, widgets['switch']),
+				switch.select() if state['service_on'] else switch.deselect(),
 			),
 		},
 		'service_loop_interval': {
-			'element': (lambda: (
-				element := ttk.Label(gui_root),
-				element.pack(),
-				element,
+			'widgets': (lambda: (
+				label := ttk.Label(left_column),
+				label.pack(),
+				{ 'label': label },
 			))()[-1],
-			'update': (lambda element: (
-				element := cast(ttk.Label, element),
-				element.config(text = f'''Processing interval in ms: {
+			'update': (lambda widgets: (
+				label := cast(ttk.Label, widgets['label']),
+				label.config(text = f'''Processing interval in ms: {
 					state['service_loop_interval']
 				}'''),
 			)),
 		},
 		'service_loop_measured_delta': {
-			'element': (lambda: (
-				element := ttk.Label(gui_root),
-				element.pack(),
-				element,
+			'widgets': (lambda: (
+				label := ttk.Label(left_column),
+				label.pack(),
+				{ 'label': label },
 			))()[-1],
-			'update': (lambda element: (
-				element := cast(ttk.Label, element),
-				element.config(text = f'''Measured delta in ms: {
+			'update': (lambda widgets: (
+				label := cast(ttk.Label, widgets['label']),
+				label.config(text = f'''Measured delta in ms: {
 					str(state['service_loop_measured_delta']).zfill(2)
 				}'''),
 			)),
 		},
 		'selected_syringe': {
-			'element': (lambda: (
-				element := ttk.Label(gui_root),
-				element.pack(),
-				element,
+			'widgets': (lambda: (
+				label := ttk.Label(left_column),
+				label.pack(),
+				{ 'label': label },
 			))()[-1],
-			'update': (lambda element: (
-				element := cast(ttk.Label, element),
-				element.config(text = f'''Selected syringe: {
+			'update': (lambda widgets: (
+				label := cast(ttk.Label, widgets['label']),
+				label.config(text = f'''Selected syringe: {
 					state['selected_syringe']
 				}'''),
 			)),
 		},
-		'switch_to_syringe_1_button': {
-			'element': (lambda: (
-				element := ttk.Button(
-					gui_root,
-					text = 'Switch to syringe 1',
-					command = lambda: (
-						state['command_queue'].append({
-							'enqueued_at': time_ms(),
-							'specifics': {
-								'verb': 'Rotate',
-								'target_syringe': 1,
-							},
-						}),
-					),
-				),
-				element.pack(),
-				element,
+		'switch_to_syringe_buttons': {
+			'widgets': (lambda: (
+				buttons := dict(map(
+					lambda i: (f'button{i}', ttk.Button(
+						left_column,
+						text = f'Switch to syringe {i}',
+						command = lambda: (
+							state['command_queue'].append({
+								'enqueued_at': time_ms(),
+								'specifics': {
+									'verb': 'Rotate',
+									'target_syringe': i,
+								},
+							}),
+						),
+					)),
+					cast(List[SyringeNumber], [0, 1, 2, 3]),
+				)),
+				[button.pack() for button in buttons.values()],
+				buttons,
 			))()[-1],
-			'update': lambda element: None,
-		},
-		'switch_to_syringe_2_button': {
-			'element': (lambda: (
-				element := ttk.Button(
-					gui_root,
-					text = 'Switch to syringe 2',
-					command = lambda: (
-						state['command_queue'].append({
-							'enqueued_at': time_ms(),
-							'specifics': {
-								'verb': 'Rotate',
-								'target_syringe': 2,
-							},
-						}),
-					),
-				),
-				element.pack(),
-				element,
-			))()[-1],
-			'update': lambda element: None,
-		},
-		'switch_to_syringe_3_button': {
-			'element': (lambda: (
-				element := ttk.Button(
-					gui_root,
-					text = 'Switch to syringe 3',
-					command = lambda: (
-						state['command_queue'].append({
-							'enqueued_at': time_ms(),
-							'specifics': {
-								'verb': 'Rotate',
-								'target_syringe': 3,
-							},
-						}),
-					),
-				),
-				element.pack(),
-				element,
-			))()[-1],
-			'update': lambda element: None,
-		},
-		'switch_to_syringe_4_button': {
-			'element': (lambda: (
-				element := ttk.Button(
-					gui_root,
-					text = 'Switch to syringe 4',
-					command = lambda: (
-						state['command_queue'].append({
-							'enqueued_at': time_ms(),
-							'specifics': {
-								'verb': 'Rotate',
-								'target_syringe': 4,
-							},
-						}),
-					),
-				),
-				element.pack(),
-				element,
-			))()[-1],
-			'update': lambda element: None,
+			'update': lambda widgets: None,
 		},
 		'command_queue': {
-			'element': (lambda: (
-				element := ttk.Label(gui_root),
-				element.pack(),
-				element,
+			'widgets': (lambda: (
+				frame := ttk.Frame(middle_column),
+				frame.pack(fill = 'both', expand = True),
+				
+				text := tkinter.Text(frame),#, wrap = 'none'),
+				text.config(state = tkinter.NORMAL),
+				text.pack(),
+				{ 'frame': frame, 'text': text },
 			))()[-1],
-			'update': (lambda element: (
-				element := cast(ttk.Label, element),
-				element.config(text = f'Command queue:\n{'\n'.join(list(map(
-					lambda command: str(command),
+			'update': (lambda widgets: (
+				text := cast(tkinter.Text, widgets['text']),
+				text.delete('1.0', tkinter.END),
+				text.insert(tkinter.END, f'Command queue:\n{'\n'.join(list(map(
+					lambda command: json.dumps(
+						command['specifics'],
+						indent = 4,
+					),
 					state['command_queue'],
 				)))}'),
 			)),
 		},
 		'clear_history_button': {
-			'element': (lambda: (
-				element := ttk.Button(
-					gui_root,
+			'widgets': (lambda: (
+				button := ttk.Button(
+					right_column,
 					text = 'Clear history',
 					command = lambda: state['command_history'].clear(),
 				),
-				element.pack(),
-				element,
+				button.pack(),
+				{ 'button': button },
 			))()[-1],
-			'update': lambda element: None,
+			'update': lambda widgets: None,
 		},
 		'command_history': {
-			'element': (lambda: (
-				element := ttk.Label(gui_root),
-				element.pack(),
-				element,
+			'widgets': (lambda: (
+				frame := ttk.Frame(right_column),
+				frame.pack(fill = 'both', expand = True),
+				
+				text := tkinter.Text(frame),#, wrap = 'none'),
+				text.config(state = tkinter.NORMAL),
+				text.pack(),
+				{ 'frame': frame, 'text': text },
 			))()[-1],
-			'update': (lambda element: (
-				element := cast(ttk.Label, element),
-				element.config(text = f'Command history:\n{'\n'.join(list(map(
-					lambda command: str(command),
-					state['command_history'],
-				)))}'),
+			'update': (lambda widgets: (
+				text := cast(tkinter.Text, widgets['text']),
+				text.delete('1.0', tkinter.END),
+				text.insert(
+					tkinter.END,
+					f'Command history:\n{'\n'.join(list(map(
+						lambda command: json.dumps(
+							command['specifics'],
+							indent = 4,
+						),
+						state['command_history'],
+					)))}'
+				),
 			)),
 		},
 	}

@@ -10,7 +10,7 @@ def flip_bit(value: Bit) -> Bit:
 def time_ms() -> int:
 	return floor(time_ns() / 1e6)
 
-def set_value(dict: Any, key: str, value: Any):
+def set_value(dict: Any, key: Any, value: Any):
 	'''
 	Useful for modifying values from inside multi-statement lambdas, which is
 	normally not allowed.
