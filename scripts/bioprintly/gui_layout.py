@@ -1,10 +1,10 @@
-from colorsys import hsv_to_rgb
+from tkinter import messagebox
 from tkinter.font import nametofont
 from state import CommandSpecifics, GlobalState, PinNumber, SyringeNumber, enqueue_command
 import tkinter
 from tkinter import Tk, ttk
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple, TypedDict, cast, get_args
-from util import friendly_timestamp, intersperse, set_value
+from util import friendly_timestamp, hsv_to_hex, intersperse, set_value
 
 class GuiElement(TypedDict):
 	widgets: Mapping[str, tkinter.Widget | ttk.Widget]
@@ -14,33 +14,39 @@ def build_gui_layout(
 	gui_root: Tk,
 	state: GlobalState
 ) -> Dict[str, GuiElement]:
-	gui_root.grid_rowconfigure(0, weight = 1)
-	[gui_root.grid_columnconfigure(
+	outermost_pad_x = 4 * state['ui_scale_percent'] / 100
+	outermost_pad_y = 4 * state['ui_scale_percent'] / 100
+	outermost = ttk.Frame(gui_root)
+	outermost.pack(
+		fill = 'both',
+		expand = True,
+		padx = outermost_pad_x,
+		pady = outermost_pad_y,
+	)
+	outermost.grid_rowconfigure(0, weight = 1)
+	[outermost.grid_columnconfigure(
 		i,
 		weight = 1,
-		uniform='gui_root'
+		uniform='outermost'
 	) for i in [0, 1, 2]]
 	
-	main_column_pad_x = 2
-	main_column_pad_y = 2
-	left_column = ttk.LabelFrame(gui_root, text = 'Controls')
+	main_columns_pad_x = 3 * state['ui_scale_percent'] / 100
+	main_columns_pad_y = 3 * state['ui_scale_percent'] / 100
+	left_column = ttk.LabelFrame(outermost, text = 'Controls')
 	left_column.grid(
 		row = 0, column = 0, sticky = 'nsew',
-		padx = main_column_pad_x, pady = main_column_pad_y,
+		padx = main_columns_pad_x, pady = main_columns_pad_y,
 	)
-	middle_column = ttk.LabelFrame(gui_root, text = 'Command queue')
+	middle_column = ttk.LabelFrame(outermost, text = 'Command queue')
 	middle_column.grid(
 		row = 0, column = 1, sticky = 'nsew',
-		padx = main_column_pad_x, pady = main_column_pad_y,
+		padx = main_columns_pad_x, pady = main_columns_pad_y,
 	)
-	right_column = ttk.LabelFrame(gui_root, text = 'Command history')
+	right_column = ttk.LabelFrame(outermost, text = 'Command history')
 	right_column.grid(
 		row = 0, column = 2, sticky = 'nsew',
-		padx = main_column_pad_x, pady = main_column_pad_y,
+		padx = main_columns_pad_x, pady = main_columns_pad_y,
 	)
-	right_column.grid_rowconfigure(0, weight = 1, uniform = 'right_column')
-	right_column.grid_rowconfigure(1, weight = 29, uniform = 'right_column')
-	right_column.grid_columnconfigure(0, weight = 1)
 	
 	[(
 		frame.grid_propagate(False),
@@ -48,11 +54,12 @@ def build_gui_layout(
 		frame.grid_columnconfigure(0, weight = 1),
 	) for frame in [left_column, middle_column, right_column]]
 	
-	control_frames_pad_x = 4
-	control_frames_pad_y = 8
-	control_frames_ipad_x = 0
-	control_frames_ipad_y = 0
-	
+	control_frames_pad_x = 4 * state['ui_scale_percent'] / 100
+	control_frames_pad_y = 8 * state['ui_scale_percent'] / 100
+	control_frames_ipad_x = 0 * state['ui_scale_percent'] / 100
+	control_frames_ipad_y = 0 * state['ui_scale_percent'] / 100
+	scrollable_text_pad_left = 5 * ' '
+
 	return {
 		'ui_scale': {
 			'widgets': (lambda: (
@@ -136,7 +143,7 @@ def build_gui_layout(
 				),
 				interval_setting.config(
 					text = f'''Processing interval setting in ms: {
-						state['processing_loop_interval']
+						str(state['processing_loop_interval']).zfill(2)
 					}'''
 				),
 				measured_delta := cast(
@@ -213,37 +220,58 @@ def build_gui_layout(
 		},
 		'command_queue': build_scrollable_text(
 			middle_column,
-			lambda: intersperse(list(map(
-				lambda command: (
-f'''{command['specifics']['verb']}
-Enqueued at {friendly_timestamp(command['enqueued_at'])}
-{friendly_specifics(command['specifics'])}
-''',
+			lambda: list(map(
+				lambda command: (f'''
+{scrollable_text_pad_left}[{command['specifics']['verb']}]
+{scrollable_text_pad_left}Enqueued at {
+	friendly_timestamp(command['enqueued_at'])
+}{f'''
+{scrollable_text_pad_left}Started at {
+	friendly_timestamp(command['started_at'])
+}''' if 'started_at' in command else ''}
+{friendly_specifics(command['specifics'], scrollable_text_pad_left + ' ✒ ')}
+\n''',
 					color_tag_from_ordinal(command['ordinal']),
 				),
 				state['command_queue'],
-			)), ('\n', '')),
+			)),
+			f'\n{scrollable_text_pad_left}(Empty)',
 		),
 		'command_history': build_scrollable_text(
 			right_column,
-			lambda: intersperse(list(map(
-				lambda command: (
-f'''{command['specifics']['verb']}
-Started at {friendly_timestamp(command['started_at'])}
-Finished at {friendly_timestamp(command['finished_at'])}
-{friendly_specifics(command['specifics'])}
-''',
+			lambda: list(map(
+				lambda command: (f'''
+{scrollable_text_pad_left}[{command['specifics']['verb']}]
+{scrollable_text_pad_left}Enqueued at {
+	friendly_timestamp(command['enqueued_at'])
+}
+{scrollable_text_pad_left}Started at {
+	friendly_timestamp(command['started_at'])
+}
+{scrollable_text_pad_left}Finished at {
+	friendly_timestamp(command['finished_at'], False)
+} (took {(command['finished_at'] - command['started_at']):,} ms)
+{friendly_specifics(command['specifics'], scrollable_text_pad_left + ' ✒ ')}
+\n''',
 					color_tag_from_ordinal(command['ordinal']),
 				),
 				reversed(state['command_history']),
-			)), ('\n', '')),
+			)),
+			f'\n{scrollable_text_pad_left}(Empty)',
 		),
 		'clear_history_button': {
 			'widgets': (lambda: (
 				button := ttk.Button(
 					right_column,
 					text = 'Clear history',
-					command = lambda: state['command_history'].clear(),
+					command = lambda: [
+						state['command_history'].clear()
+						if messagebox.askokcancel(
+							'Are you sure?',
+							'Are you confident that this is the right decision',
+						)
+						else None
+					],
 				),
 				button.pack(),
 				{ 'button': button },
@@ -258,6 +286,7 @@ def build_scrollable_text(
 		# (text_segment, color_tag_name)
 		Tuple[str, str]
 	]],
+	empty_text,
 ) -> GuiElement:
 	return {
 		'widgets': (lambda: (
@@ -274,6 +303,7 @@ def build_scrollable_text(
 			text := tkinter.Text(
 				text_restrictor,
 				state = 'disabled',
+				wrap = 'none',
 				highlightthickness = 0,
 			),
 			text.pack(fill = 'both', expand = True),
@@ -309,7 +339,7 @@ def build_scrollable_text(
 						color_tag,
 					) for (text_segment, color_tag) in text_content
 				] if len(text_content) > 0
-				else text.insert('end', '(Empty)')
+				else text.insert('end', empty_text)
 			],
 			text.configure(state = 'disabled'),
 			text_height_after := text.count('1.0', 'end', 'ypixels')[0],
@@ -320,23 +350,20 @@ def build_scrollable_text(
 		)),
 	}
 
-def friendly_specifics(specifics: CommandSpecifics) -> str:
+def friendly_specifics(specifics: CommandSpecifics, pad_left = '') -> str:
 	return '\n'.join(map(
-		lambda item: f'    {item[0]}: {item[1]}',
+		lambda item: f'{pad_left}{item[0]}: {item[1]}',
 		filter(
 			lambda item: item[0] != 'verb',
 			specifics.items(),
 		),
 	))
 
-NEUTRAL_COLOR = '#272727'
+GREY_BANDING = hsv_to_hex(0, 0, 0.20)
 COMMAND_COLORS = intersperse(list(map(
-	lambda hue: '#%02x%02x%02x' % tuple(map(
-		lambda rgb: round(255 * rgb),
-		hsv_to_rgb(hue, 0.40, 0.12)
-	)),
+	lambda hue: hsv_to_hex(hue, 0.50, 0.20),
 	reversed([0.95 - x / 5 * 0.65 for x in range(5)]),
-)), NEUTRAL_COLOR) + [NEUTRAL_COLOR]
+)), GREY_BANDING) + [GREY_BANDING]
 
 def color_tag_from_ordinal(ordinal: int) -> str:
 	return str(ordinal % len(COMMAND_COLORS))
