@@ -2,7 +2,9 @@ from copy import copy
 import json
 from os import environ
 from pathlib import Path
-from typing import Dict, Literal, NotRequired, TypedDict, cast, get_args
+from tkinter import Tk, ttk
+import tkinter
+from typing import Any, Callable, Dict, Literal, Mapping, NotRequired, TypedDict, cast, get_args
 from util import Bit, unix_time_ms
 
 PinNumber = Literal[
@@ -42,14 +44,22 @@ class FinishedCommand(TypedDict):
 	finished_at: int
 	specifics: CommandSpecifics
 
+class GuiElement(TypedDict):
+	widgets: Mapping[str, tkinter.Widget | ttk.Widget]
+	update: Callable[[Mapping[str, tkinter.Widget | ttk.Widget]], Any]
+
 class NonPersistentState(TypedDict):
 	savefile_path: str
-	shutting_down: bool
+	gui_root: NotRequired[Tk]
+	gui_elements: NotRequired[Dict[str, GuiElement]]
 	default_font_sizes: Dict[str, int]
+	reopening_gui: bool
+	shutting_down: bool
+	selected_syringe: SyringeNumber | None
+	processing_enabled: bool
 class GlobalState(TypedDict):
 	nonpersistent: NonPersistentState
-	ui_scale_percent: float
-	processing_enabled: bool
+	ui_scale: float
 	processing_loop_interval: int
 	processing_loop_last_start: int
 	processing_loop_measured_delta: int
@@ -57,7 +67,6 @@ class GlobalState(TypedDict):
 	command_queue: list[Command]
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
-	selected_syringe: SyringeNumber
 	rotator_steps_equivalent_to_90_degrees: int
 
 def establish_savefile_path() -> str:
@@ -96,11 +105,13 @@ def get_initial_global_state() -> GlobalState:
 	state: GlobalState = {
 		'nonpersistent': {
 			'savefile_path': establish_savefile_path(),
-			'shutting_down': False,
 			'default_font_sizes': {},
+			'reopening_gui': False,
+			'shutting_down': False,
+			'selected_syringe': None,
+			'processing_enabled': False,
 		},
-		'ui_scale_percent': 100,
-		'processing_enabled': False,
+		'ui_scale': 1,
 		'processing_loop_interval': 8,
 		'processing_loop_last_start': 0,
 		'processing_loop_measured_delta': 0,
@@ -111,7 +122,6 @@ def get_initial_global_state() -> GlobalState:
 		'command_queue': [],
 		'command_history': [],
 		'next_command_ordinal': 0,
-		'selected_syringe': 1,
 		'rotator_steps_equivalent_to_90_degrees': 235,
 	}
 	

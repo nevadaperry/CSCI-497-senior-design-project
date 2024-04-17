@@ -1,4 +1,4 @@
-from gui import setup_gui
+from gui import run_gui
 from pins import setup_pins
 from service import run_service
 from state import get_initial_global_state, load_state_from_disk
@@ -13,6 +13,11 @@ def setup_everything():
 	Timer(0, run_service, [state]).start()
 	
 	# Run the GUI as the main thread
-	setup_gui(state)
+	while True:
+		run_gui(state)
+		if state['nonpersistent']['reopening_gui'] == True:
+			state['nonpersistent']['reopening_gui'] = False
+			continue
+		break
 
 setup_everything()

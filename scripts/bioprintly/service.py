@@ -1,3 +1,4 @@
+from tkinter import messagebox
 from typing import cast
 from pins import read_pin, write_pin, zero_out_pins
 from state import CommandActuate, FinishedCommand, GlobalState, save_state_to_disk
@@ -6,22 +7,31 @@ from util import flip_bit, direction, unix_time_ms
 
 def run_service(state: GlobalState):
 	while state['nonpersistent']['shutting_down'] == False:
-		state['processing_loop_measured_delta'] = \
+		state['processing_loop_measured_delta'] = (
 			unix_time_ms() - state['processing_loop_last_start']
+		)
 		state['processing_loop_last_start'] = unix_time_ms()
 		
-		if state['processing_enabled'] == True:
+		if state['nonpersistent']['processing_enabled'] == True:
 			process_commands(state)
 		
 		sleep(max(0,
-			state['processing_loop_interval'] - \
-				(unix_time_ms() - state['processing_loop_last_start'])
+			state['processing_loop_interval']
+				- (unix_time_ms() - state['processing_loop_last_start'])
 		) / 1e3)
 	
 	save_state_to_disk(state)
 	zero_out_pins()
 
 def process_commands(state: GlobalState):
+	if state['nonpersistent']['selected_syringe'] == None:
+		state['nonpersistent']['processing_enabled'] = False
+		messagebox.showwarning(
+			message = 'Barrel has not been calibrated yet for this run.',
+			detail = 'Please rotate it by hand to the syringe marked #1, then click the certify calibration button.',
+		)
+		return
+	
 	if len(state['command_queue']) == 0:
 		return
 	
@@ -32,18 +42,19 @@ def process_commands(state: GlobalState):
 	specifics = active_command['specifics']
 	match specifics['verb']:
 		case 'Rotate':
-			if \
-				not 'direction' in specifics or \
-				not 'half_steps_remaining' in specifics \
-			:
-				raw_steps_required = \
-					(specifics['target_syringe'] - state['selected_syringe']) \
-					* state['rotator_steps_equivalent_to_90_degrees']
+			if (
+				not 'direction' in specifics or
+				not 'half_steps_remaining' in specifics
+			):
+				raw_steps_required = ((specifics['target_syringe'] - state['nonpersistent']['selected_syringe'])
+					* state['rotator_steps_equivalent_to_90_degrees'])
 				specifics['direction'] = direction(raw_steps_required)
 				specifics['half_steps_remaining'] = 2 * abs(raw_steps_required)
 			
 			if specifics['half_steps_remaining'] == 0:
-				state['selected_syringe'] = specifics['target_syringe']
+				state['nonpersistent']['selected_syringe'] = (
+					specifics['target_syringe']
+				)
 				finish_active_task(state)
 				return
 			write_pin(state, 'rotator_direction', specifics['direction'])
@@ -54,8 +65,9 @@ def process_commands(state: GlobalState):
 		
 		case 'Actuate':
 			if not 'half_steps_remaining' in specifics:
-				specifics['half_steps_remaining'] = \
+				specifics['half_steps_remaining'] = (
 					2 * specifics['steps_needed_total']
+				)
 			
 			if specifics['half_steps_remaining'] == 0:
 				finish_active_task(state)

@@ -1,21 +1,15 @@
 from tkinter import messagebox
-from tkinter.font import nametofont
-from state import CommandSpecifics, GlobalState, PinNumber, SyringeNumber, enqueue_command
+from state import CommandSpecifics, GlobalState, GuiElement, PinNumber, SyringeNumber, enqueue_command, save_state_to_disk
 import tkinter
-from tkinter import Tk, ttk
-from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple, TypedDict, cast, get_args
+from tkinter import ttk
+from typing import Any, Callable, Dict, List, Sequence, Tuple, cast, get_args
 from util import friendly_timestamp, hsv_to_hex, intersperse, set_value
 
-class GuiElement(TypedDict):
-	widgets: Mapping[str, tkinter.Widget | ttk.Widget]
-	update: Callable[[Mapping[str, tkinter.Widget | ttk.Widget]], Any]
-
-def build_gui_layout(
-	gui_root: Tk,
-	state: GlobalState
-) -> Dict[str, GuiElement]:
-	outermost_pad_x = 4 * state['ui_scale_percent'] / 100
-	outermost_pad_y = 4 * state['ui_scale_percent'] / 100
+def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
+	gui_root = state['nonpersistent']['gui_root'] # type: ignore
+	
+	outermost_pad_x = 4 * state['ui_scale']
+	outermost_pad_y = 4 * state['ui_scale']
 	outermost = ttk.Frame(gui_root)
 	outermost.pack(
 		fill = 'both',
@@ -30,8 +24,8 @@ def build_gui_layout(
 		uniform='outermost'
 	) for i in [0, 1, 2]]
 	
-	main_columns_pad_x = 3 * state['ui_scale_percent'] / 100
-	main_columns_pad_y = 3 * state['ui_scale_percent'] / 100
+	main_columns_pad_x = 3 * state['ui_scale']
+	main_columns_pad_y = 3 * state['ui_scale']
 	left_column = ttk.LabelFrame(outermost, text = 'Controls')
 	left_column.grid(
 		row = 0, column = 0, sticky = 'nsew',
@@ -54,11 +48,12 @@ def build_gui_layout(
 		frame.grid_columnconfigure(0, weight = 1),
 	) for frame in [left_column, middle_column, right_column]]
 	
-	control_frames_pad_x = 4 * state['ui_scale_percent'] / 100
-	control_frames_pad_y = 8 * state['ui_scale_percent'] / 100
-	control_frames_ipad_x = 0 * state['ui_scale_percent'] / 100
-	control_frames_ipad_y = 0 * state['ui_scale_percent'] / 100
-	scrollable_text_pad_left = 5 * ' '
+	control_frames_pad_x = 4 * state['ui_scale']
+	control_frames_pad_y = 8 * state['ui_scale']
+	control_frames_ipad_x = 0 * state['ui_scale']
+	control_frames_ipad_y = 0 * state['ui_scale']
+	
+	scrollable_text_pad_left = ' ' * round(5 * state['ui_scale'])
 
 	return {
 		'ui_scale': {
@@ -84,9 +79,18 @@ def build_gui_layout(
 				),
 				combobox.bind(
 					'<<ComboboxSelected>>',
-					lambda event, combobox = combobox: update_ui_scale(
-						state,
-						float(combobox.get().split('%')[0]),
+					lambda event, combobox = combobox: (
+						set_value(
+							state,
+							'ui_scale',
+							float(combobox.get().split('%')[0]) / 100,
+						),
+						save_state_to_disk(state),
+						set_value(
+							state['nonpersistent'],
+							'reopening_gui',
+							True,
+						),
 					),
 				),
 				combobox.pack(),
@@ -96,12 +100,38 @@ def build_gui_layout(
 		},
 		'processing': {
 			'widgets': (lambda: (
-				frame := ttk.LabelFrame(
-					left_column,
-					text = 'Processing',
-					labelanchor = 'n'
+				do_this_first := ttk.LabelFrame(
+					middle_column,
+					text = 'Do this first',
 				),
-				frame.pack(
+				do_this_first.pack(
+					fill = 'x',
+					padx = control_frames_pad_x,
+					pady = control_frames_pad_y,
+					ipadx = control_frames_ipad_x,
+					ipady = control_frames_ipad_y,
+				),
+				certify := ttk.Button(
+					do_this_first,
+					command = lambda: [
+						set_value(
+							state['nonpersistent'],
+							'selected_syringe',
+							1,
+						)
+						if messagebox.askokcancel(
+							message = 'By clicking OK, you certify that you\'ve lined up the barrel with the actuator over the syringe marked #1.',
+							detail = 'This is the only way this program can know the starting angle of the barrel.'
+						)
+						else None
+					],
+				),
+				certify.pack(),
+				processing := ttk.LabelFrame(
+					middle_column,
+					text = 'Processing',
+				),
+				processing.pack(
 					fill = 'x',
 					padx = control_frames_pad_x,
 					pady = control_frames_pad_y,
@@ -109,32 +139,39 @@ def build_gui_layout(
 					ipady = control_frames_ipad_y,
 				),
 				switch := tkinter.Checkbutton(
-					frame,
+					processing,
 					text = 'Enable processing',
 					command = lambda: (
 						set_value(
-							state,
+							state['nonpersistent'],
 							'processing_enabled',
-							not state['processing_enabled']
+							not state['nonpersistent']['processing_enabled']
 						),
 					),
 				),
 				switch.pack(),
-				interval_setting := ttk.Label(frame),
+				interval_setting := ttk.Label(processing),
 				interval_setting.pack(),
-				measured_delta := ttk.Label(frame),
+				measured_delta := ttk.Label(processing),
 				measured_delta.pack(),
 				{
+					'certify': certify,
 					'switch': switch,
 					'interval_setting': interval_setting,
 					'measured_delta': measured_delta,
 				},
 			))()[-1],
 			'update': lambda widgets: (
+				certify := cast(ttk.Button, widgets['certify']),
+				certify.config(text = (
+					'✒ Certify that the barrel is calibrated'
+					if state['nonpersistent']['selected_syringe'] == None
+					else '✅ (Re)-certify that the barrel is calibrated'
+				)),
 				switch := cast(tkinter.Checkbutton, widgets['switch']),
 				(
 					switch.select()
-					if state['processing_enabled']
+					if state['nonpersistent']['processing_enabled']
 					else switch.deselect()
 				),
 				interval_setting := cast(
@@ -157,11 +194,11 @@ def build_gui_layout(
 				),
 			),
 		},
-		'syringe': {
+		'rotator': {
 			'widgets': (lambda: (
 				frame := ttk.LabelFrame(
 					left_column,
-					text = 'Syringes',
+					text = 'Rotator',
 					labelanchor = 'n',
 				),
 				frame.pack(
@@ -190,33 +227,9 @@ def build_gui_layout(
 			'update': lambda widgets: (
 				selected := cast(ttk.Label, widgets['selected']),
 				selected.config(text = f'''Selected syringe: {
-					state['selected_syringe']
+					state['nonpersistent']['selected_syringe']
 				}'''),
 			),
-		},
-		'pin_mappings': {
-			'widgets': (lambda: (
-				frame := ttk.LabelFrame(
-					left_column,
-					text = 'Pin mappings',
-					labelanchor = 'n',
-				),
-				frame.pack(
-					fill = 'x',
-					padx = control_frames_pad_x,
-					pady = control_frames_pad_y,
-					ipadx = control_frames_ipad_x,
-					ipady = control_frames_ipad_y,
-				),
-				combobox := ttk.Combobox(
-					frame,
-					state = 'readonly',
-					values = sorted(get_args(PinNumber)),
-				),
-				combobox.pack(),
-				{ 'combobox': combobox },
-			))()[-1],
-			'update': lambda widgets: None,
 		},
 		'command_queue': build_scrollable_text(
 			middle_column,
@@ -237,6 +250,35 @@ def build_gui_layout(
 			)),
 			f'\n{scrollable_text_pad_left}(Empty)',
 		),
+		'pin_io': {
+			'widgets': (lambda: (
+				frame := ttk.LabelFrame(
+					middle_column,
+					text = 'Pin I/O',
+					labelanchor = 'n',
+				),
+				frame.pack(
+					fill = 'both',
+					padx = control_frames_pad_x,
+					pady = control_frames_pad_y,
+					ipadx = control_frames_ipad_x,
+					ipady = control_frames_ipad_y,
+				),
+				features := list(map(
+					lambda thing: (
+						feature := ttk.Combobox(
+							frame,
+							state = 'readonly',
+							values = ['1', '2', '3', '4'],
+						),
+						feature.pack(),
+					),
+					['feature1', 'feature2'],
+				)),
+				{},
+			))()[-1],
+			'update': lambda widgets: None,
+		},
 		'command_history': build_scrollable_text(
 			right_column,
 			lambda: list(map(
@@ -367,33 +409,3 @@ COMMAND_COLORS = intersperse(list(map(
 
 def color_tag_from_ordinal(ordinal: int) -> str:
 	return str(ordinal % len(COMMAND_COLORS))
-
-TK_STANDARD_FONT_NAMES = [
-	'TkDefaultFont',
-	'TkTextFont',
-	'TkFixedFont',
-	'TkMenuFont',
-	'TkHeadingFont',
-	'TkCaptionFont',
-	'TkSmallCaptionFont',
-	'TkIconFont',
-	'TkTooltipFont',
-]
-
-def update_ui_scale(state: GlobalState, percent: float | None = None):
-	if percent == None:
-		percent = state['ui_scale_percent']
-	else:
-		state['ui_scale_percent'] = percent
-	
-	default_font_sizes = state['nonpersistent']['default_font_sizes']
-	
-	for font_name in TK_STANDARD_FONT_NAMES:
-		font = nametofont(font_name)
-		
-		if font_name not in default_font_sizes:
-			current_size = font.actual()['size']
-			default_font_sizes[font_name] = current_size
-		
-		default_size = default_font_sizes[font_name]
-		font.configure(size = round(default_size * (percent / 100)))

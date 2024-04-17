@@ -46,7 +46,7 @@ def read_pin(state: GlobalState, pin_label: str) -> Bit:
 			raise Exception(f'No value found for output pin {pin_label}')
 		return pin['value']
 	else:
-		raise
+		raise Exception(f'Unknown pin type {pin['type']} in read_pin')
 
 def write_pin(state: GlobalState, pin_label: str, value: Bit):
 	if not pin_label in state['pins']:
