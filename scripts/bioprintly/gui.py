@@ -1,9 +1,10 @@
+from math import floor
 from gui_layout import GuiElement, build_gui_layout
 from pins import zero_out_pins_and_exit
 from state import GlobalState, save_state_to_disk
 from tkinter import Tk, ttk, messagebox
 from typing import Dict
-from util import time_ms
+from util import unix_time_ms
 
 def setup_gui(state: GlobalState):
 	gui_root = Tk()
@@ -34,7 +35,7 @@ def update_gui_repeatedly(
 	gui_elements: Dict[str, GuiElement],
 	state: GlobalState,
 ):
-	gui_update_start_time = time_ms()
+	gui_update_start_time = unix_time_ms()
 	
 	for name, gui_element in gui_elements.items():
 		gui_element['update'](gui_element['widgets'])
@@ -42,7 +43,7 @@ def update_gui_repeatedly(
 	gui_root.after(
 		max(
 			0,
-			state['gui_loop_interval'] - (time_ms() - gui_update_start_time),
+			floor(1000 / 5) - (unix_time_ms() - gui_update_start_time),
 		),
 		update_gui_repeatedly,
 		gui_root,

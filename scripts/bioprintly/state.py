@@ -32,18 +32,23 @@ class Command(TypedDict):
 	started_at: NotRequired[int]
 	finished_at: NotRequired[int]
 	specifics: CommandRotate
+class FinishedCommand(TypedDict):
+	enqueued_at: int
+	'''Unix epoch milliseconds'''
+	started_at: int
+	finished_at: int
+	specifics: CommandRotate
 
 class GlobalState(TypedDict):
 	savefile_path: str
 	gui_on: bool
-	gui_loop_interval: int
 	service_on: bool
 	service_loop_interval: int
 	service_loop_last_start: int
 	service_loop_measured_delta: int
 	pins: Dict[str, Pin]
 	command_queue: list[Command]
-	command_history: list[Command]
+	command_history: list[FinishedCommand]
 	selected_syringe: SyringeNumber
 	rotator_steps_equivalent_to_90_degrees: int
 
@@ -77,7 +82,6 @@ def get_initial_global_state() -> GlobalState:
 	state: GlobalState = {
 		'savefile_path': establish_savefile_path(),
 		'gui_on': True,
-		'gui_loop_interval': floor(1000 / 5), # 5 fps or so
 		'service_on': False,
 		'service_loop_interval': 8,
 		'service_loop_last_start': 0,
