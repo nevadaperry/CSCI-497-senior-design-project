@@ -21,9 +21,7 @@ def setup_pins(state: GlobalState):
 	'''Can be rerun idempotently'''
 	GPIO.setmode(GPIO.BOARD)
 	# Turn off all pins in case any were unmapped, or left turned on externally
-	for pin_number in get_args(PinNumber):
-		GPIO.setup(pin_number, GPIO.OUT)
-		GPIO.output(pin_number, 0)
+	zero_out_pins()
 	
 	for pin_label, pin in state['pins'].items():
 		if not pin['number'] in get_args(PinNumber):
@@ -60,7 +58,7 @@ def write_pin(state: GlobalState, pin_label: str, value: Bit):
 	pin['value'] = value
 	GPIO.output(pin['number'], value)
 
-def zero_out_pins_and_exit(state: GlobalState):
-	for pin_label, pin in state['pins'].items():
-		write_pin(state, pin_label, 0)
-	exit()
+def zero_out_pins():
+	for pin_number in get_args(PinNumber):
+		GPIO.setup(pin_number, GPIO.OUT)
+		GPIO.output(pin_number, 0)

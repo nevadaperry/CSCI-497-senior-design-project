@@ -1,7 +1,6 @@
 from math import floor
-from gui_layout import GuiElement, build_gui_layout
-from pins import zero_out_pins_and_exit
-from state import GlobalState, save_state_to_disk
+from gui_layout import GuiElement, build_gui_layout, update_ui_scale
+from state import GlobalState
 from tkinter import Tk, ttk, messagebox
 from typing import Dict
 from util import unix_time_ms
@@ -13,10 +12,11 @@ def setup_gui(state: GlobalState):
 	ttk.Style().theme_use('aqua')
 	gui_root.title('Bioprintly')
 	gui_root.state('zoomed')
+	update_ui_scale(state)
 	
 	gui_root.protocol(
 		'WM_DELETE_WINDOW',
-		lambda: confirm_close_gui(state)
+		lambda: confirm_close_gui(gui_root, state)
 	)
 	
 	gui_elements = build_gui_layout(gui_root, state)
@@ -51,11 +51,10 @@ def update_gui_repeatedly(
 		state,
 	)
 
-def confirm_close_gui(state):
+def confirm_close_gui(gui_root: Tk, state: GlobalState):
 	if messagebox.askokcancel(
 		'Are you sure?',
 		'Are you sure you want to close? This will stop command processing.',
 	):
-		save_state_to_disk(state)
-		state['gui_on'] = False
-		zero_out_pins_and_exit(state)
+		state['nonpersistent']['shutting_down'] = True
+		gui_root.destroy()

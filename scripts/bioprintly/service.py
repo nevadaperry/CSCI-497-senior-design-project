@@ -1,22 +1,25 @@
 from typing import cast
-from pins import read_pin, write_pin
-from state import FinishedCommand, GlobalState, save_state_to_disk
+from pins import read_pin, write_pin, zero_out_pins
+from state import CommandActuate, FinishedCommand, GlobalState, save_state_to_disk
 from time import sleep
 from util import flip_bit, direction, unix_time_ms
 
 def run_service(state: GlobalState):
-	while state['gui_on'] == True:
-		state['service_loop_measured_delta'] = \
-			unix_time_ms() - state['service_loop_last_start']
-		state['service_loop_last_start'] = unix_time_ms()
+	while state['nonpersistent']['shutting_down'] == False:
+		state['processing_loop_measured_delta'] = \
+			unix_time_ms() - state['processing_loop_last_start']
+		state['processing_loop_last_start'] = unix_time_ms()
 		
-		if state['service_on'] == True:
+		if state['processing_enabled'] == True:
 			process_commands(state)
 		
 		sleep(max(0,
-			state['service_loop_interval'] - \
-				(unix_time_ms() - state['service_loop_last_start'])
+			state['processing_loop_interval'] - \
+				(unix_time_ms() - state['processing_loop_last_start'])
 		) / 1e3)
+	
+	save_state_to_disk(state)
+	zero_out_pins()
 
 def process_commands(state: GlobalState):
 	if len(state['command_queue']) == 0:
@@ -52,7 +55,7 @@ def process_commands(state: GlobalState):
 		case 'Actuate':
 			if not 'half_steps_remaining' in specifics:
 				specifics['half_steps_remaining'] = \
-					2 * specifics['steps needed total']
+					2 * specifics['steps_needed_total']
 			
 			if specifics['half_steps_remaining'] == 0:
 				finish_active_task(state)

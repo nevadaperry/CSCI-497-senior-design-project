@@ -1,9 +1,9 @@
+from copy import copy
 import json
-from math import floor
 from os import environ
 from pathlib import Path
-from typing import Dict, Literal, NotRequired, Tuple, Type, TypedDict, Union
-from util import Bit
+from typing import Dict, Literal, NotRequired, TypedDict, cast, get_args
+from util import Bit, unix_time_ms
 
 PinNumber = Literal[
 	         8, 10, 12,     16, 18,     22, 24, 26,         32,     36, 38, 40,
@@ -26,29 +26,37 @@ class CommandActuate(TypedDict):
 	direction: Bit
 	steps_needed_total: int
 	half_steps_remaining: NotRequired[int]
+CommandSpecifics = CommandRotate | CommandActuate
 class Command(TypedDict):
+	ordinal: int
 	enqueued_at: int
 	'''Unix epoch milliseconds'''
 	started_at: NotRequired[int]
 	finished_at: NotRequired[int]
-	specifics: CommandRotate
+	specifics: CommandSpecifics
 class FinishedCommand(TypedDict):
+	ordinal: int
 	enqueued_at: int
 	'''Unix epoch milliseconds'''
 	started_at: int
 	finished_at: int
-	specifics: CommandRotate
+	specifics: CommandSpecifics
 
-class GlobalState(TypedDict):
+class NonPersistentState(TypedDict):
 	savefile_path: str
-	gui_on: bool
-	service_on: bool
-	service_loop_interval: int
-	service_loop_last_start: int
-	service_loop_measured_delta: int
+	shutting_down: bool
+	default_font_sizes: Dict[str, int]
+class GlobalState(TypedDict):
+	nonpersistent: NonPersistentState
+	ui_scale_percent: float
+	processing_enabled: bool
+	processing_loop_interval: int
+	processing_loop_last_start: int
+	processing_loop_measured_delta: int
 	pins: Dict[str, Pin]
 	command_queue: list[Command]
 	command_history: list[FinishedCommand]
+	next_command_ordinal: int
 	selected_syringe: SyringeNumber
 	rotator_steps_equivalent_to_90_degrees: int
 
@@ -66,32 +74,43 @@ def establish_savefile_path() -> str:
 	return f'{savefolder_path}/state.json'
 
 def save_state_to_disk(state: GlobalState):
-	savefile = open(state['savefile_path'], 'w')
-	json.dump(state, savefile, indent = "\t")
+	savefile = open(state['nonpersistent']['savefile_path'], 'w')
+	persistent_state = cast(Dict, copy(state))
+	persistent_state.pop('nonpersistent')
+	json.dump(
+		persistent_state,
+		savefile,
+		indent = '\t'
+	)
 
 def load_state_from_disk(state: GlobalState):
-	savefile = open(state['savefile_path'], 'r')
+	savefile = open(state['nonpersistent']['savefile_path'], 'r')
 	savedata = json.load(savefile)
 	for key, value in savedata.items():
-		if key in ['savefile_path', 'gui_on', 'gui_loop_interval']:
+		if key == 'nonpersistent':
 			continue
 		if key in state:
 			state[key] = value
 
 def get_initial_global_state() -> GlobalState:
 	state: GlobalState = {
-		'savefile_path': establish_savefile_path(),
-		'gui_on': True,
-		'service_on': False,
-		'service_loop_interval': 8,
-		'service_loop_last_start': 0,
-		'service_loop_measured_delta': 0,
+		'nonpersistent': {
+			'savefile_path': establish_savefile_path(),
+			'shutting_down': False,
+			'default_font_sizes': {},
+		},
+		'ui_scale_percent': 100,
+		'processing_enabled': False,
+		'processing_loop_interval': 8,
+		'processing_loop_last_start': 0,
+		'processing_loop_measured_delta': 0,
 		'pins': {
 			'rotator_step': { 'number': 3, 'type': 'output', 'value': 0 },
 			'rotator_direction': { 'number': 5, 'type': 'output', 'value': 0 },
 		},
 		'command_queue': [],
 		'command_history': [],
+		'next_command_ordinal': 0,
 		'selected_syringe': 1,
 		'rotator_steps_equivalent_to_90_degrees': 235,
 	}
@@ -102,3 +121,11 @@ def get_initial_global_state() -> GlobalState:
 		pass
 	
 	return state
+
+def enqueue_command(state: GlobalState, specifics: CommandSpecifics):
+	state['command_queue'].append({
+		'ordinal': state['next_command_ordinal'],
+		'enqueued_at': unix_time_ms(),
+		'specifics': specifics,
+	})
+	state['next_command_ordinal'] += 1

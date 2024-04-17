@@ -1,7 +1,7 @@
 from datetime import datetime
 from math import floor
 from time import time_ns
-from typing import Any, Dict, Literal, cast
+from typing import Any, List, Literal, cast
 
 Bit = Literal[0, 1]
 
@@ -28,3 +28,12 @@ def direction(value: int) -> Bit:
 		return 1
 	else:
 		return 0
+
+def intersperse(list: List, item):
+	'''
+	Adds `item` between each member of `list`.
+	From https://stackoverflow.com/a/5921708
+	'''
+	result = [item] * (len(list) * 2 - 1)
+	result[0::2] = list
+	return result
