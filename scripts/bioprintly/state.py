@@ -2,19 +2,10 @@ from copy import copy
 import json
 from os import environ
 from pathlib import Path
-from tkinter import Tk, ttk
-import tkinter
-from typing import Any, Callable, Dict, Literal, Mapping, NotRequired, TypedDict, cast, get_args
-from util import Bit, unix_time_ms
-
-PinNumber = Literal[
-	         8, 10, 12,     16, 18,     22, 24, 26,         32,     36, 38, 40,
-	 3,  5,  7,     11, 13, 15,     19, 21, 23,         29, 31, 33, 35, 37,
-]
-class Pin(TypedDict):
-	number: PinNumber
-	type: Literal['input', 'output']
-	value: NotRequired[Bit]
+from tkinter import Tk
+from typing import Any, Callable, Dict, Literal, Mapping, NotRequired, TypedDict, cast, get_args, TYPE_CHECKING
+from util import unix_time_ms
+from pins import Bit, PinMappings
 
 SyringeNumber = Literal[1, 2, 3, 4]
 
@@ -45,13 +36,13 @@ class FinishedCommand(TypedDict):
 	specifics: CommandSpecifics
 
 class GuiElement(TypedDict):
-	widgets: Mapping[str, tkinter.Widget | ttk.Widget]
-	update: Callable[[Mapping[str, tkinter.Widget | ttk.Widget]], Any]
+	widgets: Mapping[str, Any]
+	update: Callable[[Mapping[str, Any]], Any]
 
 class NonPersistentState(TypedDict):
 	savefile_path: str
-	gui_root: NotRequired[Tk]
-	gui_elements: NotRequired[Dict[str, GuiElement]]
+	gui_root: Tk | None
+	gui_elements: Dict[str, GuiElement] | None
 	default_font_sizes: Dict[str, int]
 	reopening_gui: bool
 	shutting_down: bool
@@ -63,7 +54,7 @@ class GlobalState(TypedDict):
 	processing_loop_interval: int
 	processing_loop_last_start: int
 	processing_loop_measured_delta: int
-	pins: Dict[str, Pin]
+	pins: PinMappings
 	command_queue: list[Command]
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
@@ -105,6 +96,8 @@ def get_initial_global_state() -> GlobalState:
 	state: GlobalState = {
 		'nonpersistent': {
 			'savefile_path': establish_savefile_path(),
+			'gui_root': None,
+			'gui_elements': None,
 			'default_font_sizes': {},
 			'reopening_gui': False,
 			'shutting_down': False,
@@ -115,10 +108,14 @@ def get_initial_global_state() -> GlobalState:
 		'processing_loop_interval': 8,
 		'processing_loop_last_start': 0,
 		'processing_loop_measured_delta': 0,
-		'pins': {
-			'rotator_step': { 'number': 3, 'type': 'output', 'value': 0 },
-			'rotator_direction': { 'number': 5, 'type': 'output', 'value': 0 },
-		},
+		'pins': cast(PinMappings, dict(map(
+			lambda name: (name, {
+				'number': None,
+				'io_type': None,
+				'value': None,
+			}),
+			PinMappings.__annotations__.keys(),
+		))),
 		'command_queue': [],
 		'command_history': [],
 		'next_command_ordinal': 0,

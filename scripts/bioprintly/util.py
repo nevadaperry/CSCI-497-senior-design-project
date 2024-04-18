@@ -4,11 +4,6 @@ from math import floor
 from time import time_ns
 from typing import Any, List, Literal, cast
 
-Bit = Literal[0, 1]
-
-def flip_bit(value: Bit) -> Bit:
-	return cast(Bit, +(not value))
-
 def unix_time_ms() -> int:
 	return floor(time_ns() / 1e6)
 
@@ -27,12 +22,6 @@ def set_value(dict: Any, key: Any, value: Any):
 	'''
 	dict[key] = value
 
-def direction(value: int) -> Bit:
-	if value > 0:
-		return 1
-	else:
-		return 0
-
 def intersperse(list: List, item):
 	'''
 	Adds `item` between each member of `list`.
@@ -47,3 +36,7 @@ def hsv_to_hex(hue: float, saturation: float, value: float):
 		lambda rgb: round(255 * rgb),
 		hsv_to_rgb(hue, saturation, value)
 	))
+
+def throw(exception: Exception):
+	'''Allows raising exceptions inside lambdas'''
+	raise exception

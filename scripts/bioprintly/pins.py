@@ -1,7 +1,32 @@
-from state import GlobalState, PinNumber
+from __future__ import annotations
 from types import SimpleNamespace
-from typing import cast, get_args
-from util import Bit
+from typing import Iterable, Literal, Tuple, TypedDict, cast, get_args, TYPE_CHECKING
+if TYPE_CHECKING:
+	from state import GlobalState
+
+Bit = Literal[0, 1]
+PinNumber = Literal[
+	         8, 10, 12,     16, 18,     22, 24, 26,         32,     36, 38, 40,
+	 3,  5,  7,     11, 13, 15,     19, 21, 23,         29, 31, 33, 35, 37,
+]
+InputOutput = Literal['Input', 'Output']
+class Pin(TypedDict):
+	number: PinNumber | None
+	io_type: InputOutput | None
+	value: Bit | None
+class PinMappings(TypedDict):
+	rotator_direction: Pin
+	rotator_step: Pin
+	actuator_direction: Pin
+	actuator_step: Pin
+	uv_light_1: Pin
+	uv_light_2: Pin
+	uv_light_3: Pin
+	uv_light_4: Pin
+	heater_1: Pin
+	heater_2: Pin
+	heater_3: Pin
+	heater_4: Pin
 
 try:
 	GPIO = __import__('RPi').GPIO
@@ -17,48 +42,65 @@ except:
 	})
 	GPIO = SimpleNamespace(**gpio_stub)
 
+def flip_bit(value: Bit) -> Bit:
+	return cast(Bit, +(not value))
+
+def direction(value: int) -> Bit:
+	if value > 0:
+		return 1
+	else:
+		return 0
+
 def setup_pins(state: GlobalState):
 	'''Can be rerun idempotently'''
 	GPIO.setmode(GPIO.BOARD)
 	# Turn off all pins in case any were unmapped, or left turned on externally
-	zero_out_pins()
+	zero_out_pins(state)
 	
-	for pin_label, pin in state['pins'].items():
+	for pin_name, pin in cast(
+		Iterable[Tuple[str, Pin]],
+		state['pins'].items()
+	):
+		if any(map(lambda value: value == None, pin.values())):
+			continue
 		if not pin['number'] in get_args(PinNumber):
 			raise Exception(f'Unknown pin number {pin['number']} in setup_pins')
-		if pin['type'] == 'input':
+		if pin['io_type'] == 'Input':
 			GPIO.setup(pin['number'], GPIO.IN)
-		elif pin['type'] == 'output':
+		elif pin['io_type'] == 'Output':
 			GPIO.setup(pin['number'], GPIO.OUT)
 			pin['value'] = 0
 		else:
-			raise Exception(f'Unknown pin type {pin['type']} in setup_pins')
+			raise Exception(f'Unknown pin type {pin['io_type']} in setup_pins')
 
-def read_pin(state: GlobalState, pin_label: str) -> Bit:
-	if not pin_label in state['pins']:
-		raise Exception(f'Tried to read from unknown pin {pin_label}')
-	pin = state['pins'][pin_label]
+def read_pin(state: GlobalState, pin_name: str) -> Bit:
+	if not pin_name in state['pins']:
+		raise Exception(f'Tried to read from unknown pin {pin_name}')
+	pin = state['pins'][pin_name]
 	
-	if pin['type'] == 'input':
+	if pin['io_type'] == 'Input':
 		return cast(Bit, +GPIO.input(pin['number']))
-	elif pin['type'] == 'output':
+	elif pin['io_type'] == 'Output':
 		if not 'value' in pin:
-			raise Exception(f'No value found for output pin {pin_label}')
+			raise Exception(f'No value found for output pin {pin_name}')
 		return pin['value']
 	else:
-		raise Exception(f'Unknown pin type {pin['type']} in read_pin')
+		raise Exception(f'Unknown pin type {pin['io_type']} in read_pin')
 
-def write_pin(state: GlobalState, pin_label: str, value: Bit):
-	if not pin_label in state['pins']:
-		raise Exception(f'Tried to read from unknown pin {pin_label}')
-	pin = state['pins'][pin_label]
-	if pin['type'] != 'output':
-		raise Exception(f'Tried to write to non-output pin {pin_label}')
+def write_pin(state: GlobalState, pin_name: str, value: Bit):
+	if not pin_name in state['pins']:
+		raise Exception(f'Tried to read from unknown pin {pin_name}')
+	pin = state['pins'][pin_name]
+	if pin['io_type'] != 'Output':
+		raise Exception(f'Tried to write to non-output pin {pin_name}')
 	
 	pin['value'] = value
 	GPIO.output(pin['number'], value)
 
-def zero_out_pins():
+def zero_out_pins(state: GlobalState):
 	for pin_number in get_args(PinNumber):
 		GPIO.setup(pin_number, GPIO.OUT)
 		GPIO.output(pin_number, 0)
+	
+	for pin_name in state['pins']:
+		write_pin(state, pin_name, 0)
