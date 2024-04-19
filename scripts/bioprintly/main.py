@@ -8,6 +8,7 @@ from util import set_value
 
 def setup_everything():
 	state = get_initial_global_state()
+	gui_root = state['nonpersistent']['gui_root']
 	
 	setup_pins(state)
 	
@@ -17,7 +18,7 @@ def setup_everything():
 	signal.signal(signal.SIGINT, lambda a, b: (
 		save_state_to_disk(state),
 		set_value(state['nonpersistent'], 'shutting_down', True),
-		state['nonpersistent']['gui_root'].quit(),
+		gui_root.quit() if gui_root != None else None,
 	))
 	
 	# Run the GUI as the main thread

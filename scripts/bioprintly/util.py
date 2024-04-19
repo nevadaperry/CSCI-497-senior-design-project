@@ -1,5 +1,6 @@
 from colorsys import hsv_to_rgb
 from datetime import datetime
+import json
 from math import floor
 from time import time_ns
 from typing import Any, List, Literal, cast
@@ -40,3 +41,13 @@ def hsv_to_hex(hue: float, saturation: float, value: float):
 def throw(exception: Exception):
 	'''Allows raising exceptions inside lambdas'''
 	raise exception
+
+def deep_equals(a: Any, b: Any):
+	return json.dumps(a, sort_keys = True) == json.dumps(b, sort_keys = True)
+
+def flatten(two_level_list: List[List[Any]]) -> List[Any]:
+	result = []
+	for inner_list in two_level_list:
+		for value in inner_list:
+			result.append(value)
+	return result

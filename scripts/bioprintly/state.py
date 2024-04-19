@@ -3,7 +3,7 @@ import json
 from os import environ
 from pathlib import Path
 from tkinter import Tk
-from typing import Any, Callable, Dict, Literal, Mapping, NotRequired, TypedDict, cast, get_args, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Literal, Mapping, NotRequired, TypedDict, cast, get_args, TYPE_CHECKING
 from util import unix_time_ms
 from pins import Bit, PinMappings
 
@@ -35,14 +35,17 @@ class FinishedCommand(TypedDict):
 	finished_at: int
 	specifics: CommandSpecifics
 
-class GuiElement(TypedDict):
-	widgets: Mapping[str, Any]
-	update: Callable[[Mapping[str, Any]], Any]
+# Basically useEffect
+class Redrawable(TypedDict):
+	dependencies: List[Callable[[], Any]]
+	'''List of functions whose return values will trigger a redraw if changed'''
+	redraw: Callable[[], Any]
 
 class NonPersistentState(TypedDict):
 	savefile_path: str
 	gui_root: Tk | None
-	gui_elements: Dict[str, GuiElement] | None
+	gui_redrawables: List[Redrawable]
+	gui_dependency_cache: Dict[str, Any]
 	default_font_sizes: Dict[str, int]
 	reopening_gui: bool
 	shutting_down: bool
@@ -97,7 +100,8 @@ def get_initial_global_state() -> GlobalState:
 		'nonpersistent': {
 			'savefile_path': establish_savefile_path(),
 			'gui_root': None,
-			'gui_elements': None,
+			'gui_redrawables': [],
+			'gui_dependency_cache': {},
 			'default_font_sizes': {},
 			'reopening_gui': False,
 			'shutting_down': False,
@@ -109,11 +113,14 @@ def get_initial_global_state() -> GlobalState:
 		'processing_loop_last_start': 0,
 		'processing_loop_measured_delta': 0,
 		'pins': cast(PinMappings, dict(map(
-			lambda name: (name, {
-				'number': None,
-				'io_type': None,
-				'value': None,
-			}),
+			lambda name: (
+				name,
+				{
+					'number': None,
+					'io_type': None,
+					'value': None,
+				},
+			),
 			PinMappings.__annotations__.keys(),
 		))),
 		'command_queue': [],

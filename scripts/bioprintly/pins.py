@@ -104,4 +104,4 @@ def zero_out_pins(state: GlobalState):
 		GPIO.output(pin_number, 0)
 	
 	for pin_name, pin in state['pins'].items():
-		pin['value'] = 0
+		cast(Pin, pin)['value'] = 0

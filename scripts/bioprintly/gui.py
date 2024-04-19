@@ -1,3 +1,4 @@
+from copy import deepcopy
 from math import floor
 from pins import GPIO
 from threading import Timer
@@ -6,7 +7,7 @@ from tkinter.font import nametofont
 from gui_layout import build_gui_layout
 from state import GlobalState, save_state_to_disk
 from tkinter import Tk, ttk, messagebox
-from util import throw, unix_time_ms
+from util import deep_equals, throw, unix_time_ms
 
 def run_gui(state: GlobalState):
 	gui_root = state['nonpersistent']['gui_root'] = Tk()
@@ -19,13 +20,13 @@ def run_gui(state: GlobalState):
 		lambda: confirm_close_gui(state)
 	)
 	
-	state['nonpersistent']['gui_elements'] = build_gui_layout(state)
+	state['nonpersistent']['gui_redrawables'] = build_gui_layout(state)
 	
 	gui_root.after(0, update_gui_repeatedly, state)
 	
 	try:
 		gui_root.state('zoomed')
-		# Workaround for zoom not working after re-opening the root window on Mac
+		# Workaround for zoom not working after re-opening the root window
 		if gui_root.state() != 'zoomed':
 			Timer(0, lambda: gui_root.state('zoomed')).start()
 	except:
@@ -36,14 +37,26 @@ def run_gui(state: GlobalState):
 def update_gui_repeatedly(state: GlobalState):
 	gui_update_start_time = unix_time_ms()
 	gui_root = state['nonpersistent']['gui_root']
-	gui_elements = state['nonpersistent']['gui_elements']
+	gui_redrawables = state['nonpersistent']['gui_redrawables']
+	gui_dependency_cache = state['nonpersistent']['gui_dependency_cache']
 	if gui_root == None:
 		raise Exception(f'update_gui_repeatedly: gui_root == None')
-	if gui_elements == None:
-		raise Exception(f'update_gui_repeatedly: gui_elements == None')
 	
-	for name, gui_element in gui_elements.items():
-		gui_element['redraw'](gui_element['widgets'])
+	for i, redrawable in enumerate(gui_redrawables):
+		for j, dependency in enumerate(redrawable['dependencies']):
+			cache_key = f'{i},{j}'
+			cur_value = dependency()
+			
+			if cache_key in gui_dependency_cache:
+				prev_value = gui_dependency_cache[cache_key]
+				if not deep_equals(cur_value, prev_value):
+					redrawable['redraw']()
+					gui_dependency_cache[cache_key] = deepcopy(cur_value)
+					break
+			else:
+				redrawable['redraw']()
+				gui_dependency_cache[cache_key] = deepcopy(cur_value)
+				break
 	
 	if state['nonpersistent']['reopening_gui'] == True:
 		gui_root.destroy()
@@ -52,8 +65,8 @@ def update_gui_repeatedly(state: GlobalState):
 		gui_root.after(
 			max(
 				0,
-				# Max 1 redraw per second, to keep the RPi responsive overall
-				floor(1000 / 1) - (unix_time_ms() - gui_update_start_time),
+				# Max 10 redraws per second, to keep the RPi responsive overall
+				floor(1000 / 10) - (unix_time_ms() - gui_update_start_time),
 			),
 			update_gui_repeatedly,
 			state,
