@@ -351,9 +351,10 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 {scrollable_text_pad_left}[{command['specifics']['verb']}]
 {scrollable_text_pad_left}Enqueued at {
 	friendly_timestamp(command['enqueued_at'])
-}{f'\n{scrollable_text_pad_left}Started at {
+}''' + (f'''
+{scrollable_text_pad_left}Started at {
 	friendly_timestamp(command['started_at'])
-}' if 'started_at' in command else ''}
+}''' if 'started_at' in command else '') + f'''
 {friendly_specifics(command['specifics'], scrollable_text_pad_left + ' ✒ ')}
 \n''',
 					color_tag_from_ordinal(command['ordinal']),
