@@ -6,8 +6,16 @@ from tkinter import ttk
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple, cast, get_args
 from util import friendly_timestamp, hsv_to_hex, intersperse, set_value
 
+# Raspberry Pi has performance issues with ttk
+if True:
+	ttk = tkinter
+
 def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 	gui_root = state['nonpersistent']['gui_root']
+
+	# Only use theme if ttk is enabled
+	if ttk.__name__ == 'tkinter.ttk':
+		ttk.Style().theme_use('aqua')
 	
 	outermost_pad_x = 4 * state['ui_scale']
 	outermost_pad_y = 4 * state['ui_scale']
@@ -33,7 +41,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 		padx = main_columns_pad_x, pady = main_columns_pad_y,
 	)
 	left_column_canvas = left_column
-	#left_column_canvas = tkinter.Canvas(left_column)
+	#left_column_canvas = ttk.Canvas(left_column)
 	#left_column_canvas.pack(fill = 'both', expand = True)
 	middle_column = ttk.LabelFrame(outermost, text = 'Command queue')
 	middle_column.grid(
@@ -98,7 +106,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 				option_menu.pack(),
 				{},
 			))()[-1],
-			'update': lambda widgets: None,
+			'redraw': lambda widgets: None,
 		},
 		'processing': {
 			'widgets': (lambda: (
@@ -181,7 +189,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 					'measured_delta': measured_delta,
 				},
 			))()[-1],
-			'update': lambda widgets: (
+			'redraw': lambda widgets: (
 				do_this_first := cast(ttk.LabelFrame, widgets['do_this_first']),
 				do_this_first.config(text = (
 					'Do this first!'
@@ -241,7 +249,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 				[button.pack() for button in buttons.values()],
 				{ 'selected': selected, 'buttons': buttons },
 			))()[-1],
-			'update': lambda widgets: (
+			'redraw': lambda widgets: (
 				selected := cast(ttk.Label, widgets['selected']),
 				selected.config(text = f'''Selected syringe: {
 					state['nonpersistent']['selected_syringe']
@@ -279,6 +287,12 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 						),
 						name_label.grid(row = row, column = 0),
 						pin_number_variable := StringVar(),
+						initial_value := state['pins'][name]['number'],
+						[
+							pin_number_variable.set(initial_value)
+							if initial_value != None
+							else None
+						],
 						pin_number_variable.trace_add(
 							'write',
 							lambda a, b, c, variable = pin_number_variable: (
@@ -298,6 +312,12 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 						),
 						pin_number.grid(row = row, column = 1),
 						io_type_variable := StringVar(),
+						initial_value := state['pins'][name]['io_type'],
+						[
+							io_type_variable.set(initial_value)
+							if initial_value != None
+							else None
+						],
 						io_type_variable.trace_add(
 							'write',
 							lambda a, b, c, variable = io_type_variable: (
@@ -330,7 +350,10 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 				)),
 				{ 'pin_rows': pin_rows },
 			))()[-1],
-			'update': lambda widgets: (
+			'redraw_for': [
+				[],
+			],
+			'redraw': lambda widgets: (
 				pin_rows := cast(
 					List[Mapping],
 					widgets['pin_rows'],
@@ -338,9 +361,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 				[(
 					name := pin_row['name'],
 					value_label := pin_row['value_label'],
-					value_label.config(text = str(
-						state['pins'][name]['value']
-					)),
+					value_label.config(text = state['pins'][name]['value'])
 				) for pin_row in pin_rows],
 			),
 		},
@@ -402,7 +423,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 				button.pack(),
 				{ 'button': button },
 			))()[-1],
-			'update': lambda widgets: None,
+			'redraw': lambda widgets: None,
 		},
 	}
 
@@ -454,7 +475,8 @@ def build_scrollable_text(
 			text.configure(yscrollcommand = scrollbar.set),
 			{ 'text': text, 'scrollbar': scrollbar },
 		))()[-1],
-		'update': (lambda widgets: (
+		'redraw': lambda widgets: (
+			"""
 			text := cast(tkinter.Text, widgets['text']),
 			text_height_before := text.count('1.0', 'end', 'ypixels')[0],
 			scroll_fraction_start := text.yview()[0],
@@ -477,7 +499,8 @@ def build_scrollable_text(
 				scroll_fraction_start * text_height_before
 				+ (text_height_after - text_height_before)
 			) / text_height_after if scroll_fraction_start != 0 else 0),
-		)),
+			"""
+		),
 	}
 
 def friendly_specifics(specifics: CommandSpecifics, pad_left = '') -> str:

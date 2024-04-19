@@ -6,18 +6,12 @@ from tkinter.font import nametofont
 from gui_layout import build_gui_layout
 from state import GlobalState, save_state_to_disk
 from tkinter import Tk, ttk, messagebox
-import ttkthemes
 from util import throw, unix_time_ms
 
 def run_gui(state: GlobalState):
 	gui_root = state['nonpersistent']['gui_root'] = Tk()
 	gui_root.title('Bioprintly')
 	
-	# Skip theming if on RPi for performance
-	try:
-		__import__('RPi')
-	except:
-		ttk.Style().theme_use('aqua')
 	scale_fonts_by_ui_scale(state)
 	
 	gui_root.protocol(
@@ -29,7 +23,6 @@ def run_gui(state: GlobalState):
 	
 	gui_root.after(0, update_gui_repeatedly, state)
 	
-	gui_root.attributes('-zoomed', True)
 	try:
 		gui_root.state('zoomed')
 		# Workaround for zoom not working after re-opening the root window on Mac
@@ -50,7 +43,7 @@ def update_gui_repeatedly(state: GlobalState):
 		raise Exception(f'update_gui_repeatedly: gui_elements == None')
 	
 	for name, gui_element in gui_elements.items():
-		gui_element['update'](gui_element['widgets'])
+		gui_element['redraw'](gui_element['widgets'])
 	
 	if state['nonpersistent']['reopening_gui'] == True:
 		gui_root.destroy()
@@ -59,8 +52,8 @@ def update_gui_repeatedly(state: GlobalState):
 		gui_root.after(
 			max(
 				0,
-				# Max 60 fps, though the RPi achieves less
-				floor(1000 / 60) - (unix_time_ms() - gui_update_start_time),
+				# Max 1 redraw per second, to keep the RPi responsive overall
+				floor(1000 / 1) - (unix_time_ms() - gui_update_start_time),
 			),
 			update_gui_repeatedly,
 			state,
