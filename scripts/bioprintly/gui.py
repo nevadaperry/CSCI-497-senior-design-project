@@ -60,13 +60,15 @@ def update_gui_repeatedly(state: GlobalState):
 		)
 
 def confirm_close_gui(state: GlobalState):
+	if (state['nonpersistent']['gui_root'] == None):
+		raise Exception('confirm_close_gui: Found null gui_root in GlobalState')
 	if messagebox.askokcancel(
 		'Are you sure?',
 		'Are you sure you want to close? This will stop command processing.',
 	):
 		save_state_to_disk(state)
 		state['nonpersistent']['shutting_down'] = True
-		state['nonpersistent']['gui_root'].destroy() # type: ignore
+		state['nonpersistent']['gui_root'].destroy()
 
 TK_STANDARD_FONT_NAMES = [
 	'TkDefaultFont',

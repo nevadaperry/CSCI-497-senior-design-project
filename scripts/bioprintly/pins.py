@@ -17,16 +17,16 @@ class Pin(TypedDict):
 class PinMappings(TypedDict):
 	rotator_direction: Pin
 	rotator_step: Pin
+	heater_1: Pin
+	heater_2: Pin
+	heater_3: Pin
+	heater_4: Pin
 	actuator_direction: Pin
 	actuator_step: Pin
 	uv_light_1: Pin
 	uv_light_2: Pin
 	uv_light_3: Pin
 	uv_light_4: Pin
-	heater_1: Pin
-	heater_2: Pin
-	heater_3: Pin
-	heater_4: Pin
 
 try:
 	GPIO = __import__('RPi').GPIO

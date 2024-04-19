@@ -1,8 +1,10 @@
 from gui import run_gui
 from pins import setup_pins
 from service import run_service
-from state import get_initial_global_state, load_state_from_disk
+import signal
+from state import get_initial_global_state, load_state_from_disk, save_state_to_disk
 from threading import Timer
+from util import set_value
 
 def setup_everything():
 	state = get_initial_global_state()
@@ -11,6 +13,11 @@ def setup_everything():
 	
 	# Launch the service (command processing) as a secondary thread
 	Timer(0, run_service, [state]).start()
+	
+	signal.signal(signal.SIGINT, lambda a, b: (
+		save_state_to_disk(state),
+		set_value(state['nonpersistent'], 'shutting_down', True),
+	))
 	
 	# Run the GUI as the main thread
 	while True:

@@ -1,5 +1,5 @@
 from tkinter import BooleanVar, StringVar, messagebox
-from pins import InputOutput, PinMappings, PinNumber
+from pins import InputOutput, PinMappings, PinNumber, setup_pins
 from state import CommandSpecifics, GlobalState, GuiElement, SyringeNumber, enqueue_command, save_state_to_disk
 import tkinter
 from tkinter import ttk
@@ -287,6 +287,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 									'number',
 									int(variable.get()),
 								),
+								setup_pins(state),
 							),
 						),
 						pin_number := ttk.OptionMenu(
@@ -305,6 +306,7 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 									'io_type',
 									variable.get(),
 								),
+								setup_pins(state),
 							),
 						),
 						io_type := ttk.OptionMenu(
@@ -349,10 +351,9 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 {scrollable_text_pad_left}[{command['specifics']['verb']}]
 {scrollable_text_pad_left}Enqueued at {
 	friendly_timestamp(command['enqueued_at'])
-}{f'''
-{scrollable_text_pad_left}Started at {
+}{f'\n{scrollable_text_pad_left}Started at {
 	friendly_timestamp(command['started_at'])
-}''' if 'started_at' in command else ''}
+}' if 'started_at' in command else ''}
 {friendly_specifics(command['specifics'], scrollable_text_pad_left + ' ✒ ')}
 \n''',
 					color_tag_from_ordinal(command['ordinal']),
