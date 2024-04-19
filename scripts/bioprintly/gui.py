@@ -1,18 +1,23 @@
 from math import floor
+from pins import GPIO
 from threading import Timer
 from time import sleep
 from tkinter.font import nametofont
 from gui_layout import build_gui_layout
 from state import GlobalState, save_state_to_disk
 from tkinter import Tk, ttk, messagebox
+import ttkthemes
 from util import throw, unix_time_ms
 
 def run_gui(state: GlobalState):
 	gui_root = state['nonpersistent']['gui_root'] = Tk()
-	# ttkthemes themes: 'yaru', 'radiance', 'arc'
-	# vanilla ttk themes: 'aqua', 'clam', 'alt', 'default', 'classic'
-	ttk.Style().theme_use('aqua')
 	gui_root.title('Bioprintly')
+	
+	# Skip theming if on RPi for performance
+	try:
+		__import__('RPi')
+	except:
+		ttk.Style().theme_use('aqua')
 	scale_fonts_by_ui_scale(state)
 	
 	gui_root.protocol(
@@ -24,15 +29,16 @@ def run_gui(state: GlobalState):
 	
 	gui_root.after(0, update_gui_repeatedly, state)
 	
-	# Workaround for zoom not working after re-opening the root window on Mac
-	gui_root.state('zoomed')
-	if gui_root.state() != 'zoomed':
-		Timer(
-			0,
-			lambda: gui_root.state('zoomed')
-		).start()
-		
-	state['nonpersistent']['gui_root'].mainloop()
+	gui_root.attributes('-zoomed', True)
+	try:
+		gui_root.state('zoomed')
+		# Workaround for zoom not working after re-opening the root window on Mac
+		if gui_root.state() != 'zoomed':
+			Timer(0, lambda: gui_root.state('zoomed')).start()
+	except:
+		pass
+	
+	gui_root.mainloop()
 
 def update_gui_repeatedly(state: GlobalState):
 	gui_update_start_time = unix_time_ms()
@@ -53,7 +59,8 @@ def update_gui_repeatedly(state: GlobalState):
 		gui_root.after(
 			max(
 				0,
-				floor(1000 / 3) - (unix_time_ms() - gui_update_start_time),
+				# Max 60 fps, though the RPi achieves less
+				floor(1000 / 60) - (unix_time_ms() - gui_update_start_time),
 			),
 			update_gui_repeatedly,
 			state,

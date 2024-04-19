@@ -29,7 +29,8 @@ class PinMappings(TypedDict):
 	uv_light_4: Pin
 
 try:
-	GPIO = __import__('RPi').GPIO
+	GPIO = __import__('RPi', fromlist = ['GPIO']).GPIO
+	GPIO.setwarnings(False)
 except:
 	gpio_stub = ({
 		'setmode': lambda mode: None,
@@ -64,14 +65,14 @@ def setup_pins(state: GlobalState):
 		if any(map(lambda value: value == None, pin.values())):
 			continue
 		if not pin['number'] in get_args(PinNumber):
-			raise Exception(f'Unknown pin number {pin['number']} in setup_pins')
+			raise Exception(f"Unknown pin number {pin['number']} in setup_pins")
 		if pin['io_type'] == 'Input':
 			GPIO.setup(pin['number'], GPIO.IN)
 		elif pin['io_type'] == 'Output':
 			GPIO.setup(pin['number'], GPIO.OUT)
 			pin['value'] = 0
 		else:
-			raise Exception(f'Unknown pin type {pin['io_type']} in setup_pins')
+			raise Exception(f"Unknown pin type {pin['io_type']} in setup_pins")
 
 def read_pin(state: GlobalState, pin_name: str) -> Bit:
 	if not pin_name in state['pins']:
@@ -85,7 +86,7 @@ def read_pin(state: GlobalState, pin_name: str) -> Bit:
 			raise Exception(f'No value found for output pin {pin_name}')
 		return pin['value']
 	else:
-		raise Exception(f'Unknown pin type {pin['io_type']} in read_pin')
+		raise Exception(f"Unknown pin type {pin['io_type']} in read_pin")
 
 def write_pin(state: GlobalState, pin_name: str, value: Bit):
 	if not pin_name in state['pins']:
@@ -94,13 +95,13 @@ def write_pin(state: GlobalState, pin_name: str, value: Bit):
 	if pin['io_type'] != 'Output':
 		raise Exception(f'Tried to write to non-output pin {pin_name}')
 	
-	pin['value'] = value
 	GPIO.output(pin['number'], value)
+	pin['value'] = value
 
 def zero_out_pins(state: GlobalState):
 	for pin_number in get_args(PinNumber):
 		GPIO.setup(pin_number, GPIO.OUT)
 		GPIO.output(pin_number, 0)
 	
-	for pin_name in state['pins']:
-		write_pin(state, pin_name, 0)
+	for pin_name, pin in state['pins'].items():
+		pin['value'] = 0

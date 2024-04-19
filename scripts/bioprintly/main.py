@@ -17,6 +17,7 @@ def setup_everything():
 	signal.signal(signal.SIGINT, lambda a, b: (
 		save_state_to_disk(state),
 		set_value(state['nonpersistent'], 'shutting_down', True),
+		state['nonpersistent']['gui_root'].quit(),
 	))
 	
 	# Run the GUI as the main thread

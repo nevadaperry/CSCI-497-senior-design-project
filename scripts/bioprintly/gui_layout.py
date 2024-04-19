@@ -351,10 +351,10 @@ def build_gui_layout(state: GlobalState) -> Dict[str, GuiElement]:
 {scrollable_text_pad_left}[{command['specifics']['verb']}]
 {scrollable_text_pad_left}Enqueued at {
 	friendly_timestamp(command['enqueued_at'])
-}''' + (f'''
+}{f"""
 {scrollable_text_pad_left}Started at {
 	friendly_timestamp(command['started_at'])
-}''' if 'started_at' in command else '') + f'''
+}""" if 'started_at' in command else ''}
 {friendly_specifics(command['specifics'], scrollable_text_pad_left + ' ✒ ')}
 \n''',
 					color_tag_from_ordinal(command['ordinal']),
@@ -439,7 +439,11 @@ def build_scrollable_text(
 				font = 'TkTextFont',
 			),
 			[
-				text.tag_config(f'{i}', background = bg_color)
+				text.tag_config(
+					f'{i}',
+					background = bg_color,
+					foreground = 'white',
+				)
 				for (i, bg_color) in enumerate(COMMAND_COLORS)
 			],
 			scrollbar := ttk.Scrollbar(

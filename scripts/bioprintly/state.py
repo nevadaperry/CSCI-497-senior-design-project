@@ -62,11 +62,11 @@ class GlobalState(TypedDict):
 
 def establish_savefile_path() -> str:
 	if environ.get('XDG_DATA_DIR'):
-		savefolder_base = f'{environ.get('XDG_DATA_DIR')}/'
+		savefolder_base = f"{environ.get('XDG_DATA_DIR')}/"
 	elif environ.get('HOME'):
-		savefolder_base = f'{environ.get('HOME')}/.'
+		savefolder_base = f"{environ.get('HOME')}/."
 	elif environ.get('APPDATA'):
-		savefolder_base = f'{environ.get('APPDATA')}/'
+		savefolder_base = f"{environ.get('APPDATA')}/"
 	else:
 		raise Exception(f'User directory not found as any of these env vars: XDG_DATA_DIR, HOME, APPDATA')
 	savefolder_path = f'{savefolder_base}bioprintly-gui'
