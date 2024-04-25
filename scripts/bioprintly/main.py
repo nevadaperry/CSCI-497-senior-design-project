@@ -2,7 +2,7 @@ from gui import run_gui
 from pins import setup_pins
 from service import run_service
 import signal
-from state import get_initial_global_state, load_state_from_disk, save_state_to_disk
+from state import get_initial_global_state, save_state_to_disk
 from threading import Timer
 from util import set_value
 

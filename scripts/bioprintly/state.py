@@ -17,8 +17,8 @@ class CommandRotate(TypedDict):
 class CommandActuate(TypedDict):
 	verb: Literal['Actuate']
 	direction: Bit
-	steps_needed_total: int
-	half_steps_remaining: NotRequired[int]
+	milliseconds_needed_total: int
+	milliseconds_remaining: NotRequired[int]
 CommandSpecifics = CommandRotate | CommandActuate
 class Command(TypedDict):
 	ordinal: int
@@ -50,18 +50,20 @@ class NonPersistentState(TypedDict):
 	reopening_gui: bool
 	shutting_down: bool
 	selected_syringe: SyringeNumber | None
+	actuator_position_mm: float | None
 	processing_enabled: bool
+	processing_loop_last_start: int
+	processing_loop_measured_delta: int
+	processing_loop_interval: int
+	rotator_steps_equivalent_to_90_degrees: int
+	actuator_mm_per_ms: float
 class GlobalState(TypedDict):
 	nonpersistent: NonPersistentState
 	ui_scale: float
-	processing_loop_interval: int
-	processing_loop_last_start: int
-	processing_loop_measured_delta: int
 	pins: PinMappings
 	command_queue: list[Command]
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
-	rotator_steps_equivalent_to_90_degrees: int
 
 def establish_savefile_path() -> str:
 	if environ.get('XDG_DATA_DIR'):
@@ -106,12 +108,15 @@ def get_initial_global_state() -> GlobalState:
 			'reopening_gui': False,
 			'shutting_down': False,
 			'selected_syringe': None,
+			'actuator_position_mm': None,
 			'processing_enabled': False,
+			'processing_loop_interval': 8,
+			'processing_loop_measured_delta': 0,
+			'processing_loop_last_start': 0,
+			'rotator_steps_equivalent_to_90_degrees': 235,
+			'actuator_mm_per_ms': 15e-3,
 		},
 		'ui_scale': 1,
-		'processing_loop_interval': 8,
-		'processing_loop_last_start': 0,
-		'processing_loop_measured_delta': 0,
 		'pins': cast(PinMappings, dict(map(
 			lambda name: (
 				name,
@@ -126,7 +131,6 @@ def get_initial_global_state() -> GlobalState:
 		'command_queue': [],
 		'command_history': [],
 		'next_command_ordinal': 0,
-		'rotator_steps_equivalent_to_90_degrees': 235,
 	}
 	
 	try:

@@ -1,13 +1,11 @@
 from copy import deepcopy
 from math import floor
-from pins import GPIO
 from threading import Timer
-from time import sleep
 from tkinter.font import nametofont
 from gui_layout import build_gui_layout
 from state import GlobalState, save_state_to_disk
 from tkinter import Tk, ttk, messagebox
-from util import deep_equals, throw, unix_time_ms
+from util import deep_equals, unix_time_ms
 
 def run_gui(state: GlobalState):
 	gui_root = state['nonpersistent']['gui_root'] = Tk()
@@ -74,10 +72,13 @@ def update_gui_repeatedly(state: GlobalState):
 
 def confirm_close_gui(state: GlobalState):
 	if (state['nonpersistent']['gui_root'] == None):
-		raise Exception('confirm_close_gui: Found null gui_root in GlobalState')
-	if messagebox.askokcancel(
-		'Are you sure?',
-		'Are you sure you want to close? This will stop command processing.',
+		raise Exception('confirm_close_gui: gui_root == None')
+	if (
+		state['nonpersistent']['processing_enabled'] == False
+		or messagebox.askokcancel(
+			'Are you sure?',
+			'Are you sure you want to close? This will stop command processing.',
+		)
 	):
 		save_state_to_disk(state)
 		state['nonpersistent']['shutting_down'] = True

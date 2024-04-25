@@ -1,10 +1,9 @@
-import json
 from pins import InputOutput, PinMappings, PinNumber, setup_pins
 from state import CommandSpecifics, GlobalState, SyringeNumber, enqueue_command, save_state_to_disk, Redrawable
-from tkinter import BooleanVar, StringVar, messagebox
+from tkinter import StringVar, messagebox
 import tkinter
 import tkinter as ttk
-from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple, TypedDict, cast, get_args
+from typing import Callable, List, Sequence, Tuple, TypedDict, get_args
 from util import friendly_timestamp, hsv_to_hex, intersperse, set_value
 
 class ScaledConstants(TypedDict):
@@ -25,6 +24,7 @@ def build_gui_layout(state: GlobalState) -> List[Redrawable]:
 	
 	redrawables += build_ui_scale_control(state, left_column, scaled_constants)
 	redrawables += build_rotator_controls(state, left_column, scaled_constants)
+	redrawables += build_actuator_controls(state, left_column, scaled_constants)
 	redrawables += build_pin_io_controls(state, left_column, scaled_constants)
 	redrawables += build_processing_controls(
 		state,
@@ -52,11 +52,12 @@ def build_three_columns(state: GlobalState):
 		pady = outermost_pad_y,
 	)
 	outermost.grid_rowconfigure(0, weight = 1)
-	[outermost.grid_columnconfigure(
-		i,
-		weight = 1,
-		uniform = 'outermost'
-	) for i in [0, 1, 2]]
+	for i in [0, 1, 2]:
+		outermost.grid_columnconfigure(
+			i,
+			weight = 1,
+			uniform = 'outermost'
+		)
 	
 	main_columns_pad_x = 3 * state['ui_scale']
 	main_columns_pad_y = 3 * state['ui_scale']
@@ -76,11 +77,10 @@ def build_three_columns(state: GlobalState):
 		padx = main_columns_pad_x, pady = main_columns_pad_y,
 	)
 	
-	[(
-		frame.grid_propagate(False),
-		frame.grid_rowconfigure(0, weight = 1),
-		frame.grid_columnconfigure(0, weight = 1),
-	) for frame in [left_column, middle_column, right_column]]
+	for frame in [left_column, middle_column, right_column]:
+		frame.grid_propagate(False)
+		frame.grid_rowconfigure(0, weight = 1)
+		frame.grid_columnconfigure(0, weight = 1)
 	
 	return left_column, middle_column, right_column
 
@@ -99,7 +99,10 @@ def build_ui_scale_control(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	option_menu_variable = StringVar()
+	ui_scale_options = ['50%', '65%', '80%', '100%', '125%', '150%', '200%']
+	option_menu_variable = StringVar(
+		value = f'{round(100 * state['ui_scale'])}%'
+	)
 	option_menu_variable.trace_add(
 		'write',
 		lambda a, b, c, option_menu_variable=option_menu_variable: (
@@ -120,7 +123,7 @@ def build_ui_scale_control(
 		frame,
 		option_menu_variable,
 		'',
-		*['50%', '65%', '80%', '100%', '125%', '150%', '200%'],
+		*ui_scale_options,
 	)
 	option_menu.pack()
 
@@ -141,8 +144,8 @@ def build_rotator_controls(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	selected_syringe = ttk.Label(frame)
-	selected_syringe.pack()
+	selected_syringe_label = ttk.Label(frame)
+	selected_syringe_label.pack()
 	for i in get_args(SyringeNumber):
 		ttk.Button(
 			frame,
@@ -159,9 +162,56 @@ def build_rotator_controls(
 				lambda: state['nonpersistent']['selected_syringe']
 			],
 			'redraw': lambda: (
-				selected_syringe.config(text = f'''Selected syringe: {
+				selected_syringe_label.config(text = f'''Selected syringe: {
 					state['nonpersistent']['selected_syringe']
 				}'''),
+			)
+		}
+	]
+
+def build_actuator_controls(
+	state: GlobalState,
+	parent: tkinter.Widget,
+	scaled_constants: ScaledConstants,
+) -> List[Redrawable]:
+	frame = ttk.LabelFrame(
+		parent,
+		text = 'Actuator',
+		labelanchor = 'n',
+	)
+	frame.pack(
+		fill = 'x',
+		padx = scaled_constants['control_frames_pad_x'],
+		pady = scaled_constants['control_frames_pad_y'],
+	)
+	actuator_position_label = ttk.Label(frame)
+	actuator_position_label.pack()
+	ttk.Button(
+		frame,
+		text = f'Extend actuator 1 mm',
+		command = lambda: enqueue_command(state, {
+			'verb': 'Actuate',
+			'direction': 0,
+			'milliseconds_needed_total': round(
+				1 / state['nonpersistent']['actuator_mm_per_ms'],
+			),
+		}),
+	).pack()
+
+	return []
+	return [
+		{
+			'dependencies': [
+				lambda: state['nonpersistent']['actuator_position_mm']
+			],
+			'redraw': lambda: (
+				actuator_position_label.config(text = 'Actuator position: ' + (
+					f'''{
+						state['nonpersistent']['actuator_position_mm']
+					} mm extended'''
+					if state['nonpersistent']['actuator_position_mm'] != None
+					else '(Unknown; awaiting calibration)'
+				)),
 			)
 		}
 	]
@@ -300,38 +350,36 @@ def build_processing_controls(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	stats_table = ttk.Frame(controls)
-	stats_table.pack()
-	switch_variable = BooleanVar(value = False)
-	switch = ttk.Checkbutton(
-		stats_table,
-		text = 'Enable processing ',
-		variable = switch_variable,
+	try:
+		tkmacosx = __import__('tkmacosx')
+	except:
+		tkmacosx = tkinter
+	switch = tkmacosx.Button(
+		controls,
 		command = lambda: (
-			new_value := not (
-				state['nonpersistent']['processing_enabled']
-			),
 			set_value(
 				state['nonpersistent'],
 				'processing_enabled',
-				new_value,
-			),
-			switch_variable.set(new_value),
+				not state['nonpersistent']['processing_enabled'],
+			) if state['nonpersistent']['selected_syringe'] != None
+			else None
 		),
 	)
-	switch.grid(row = 0, column = 0, sticky = 'e')
+	switch.pack()
+	stats_table = ttk.Frame(controls)
+	stats_table.pack()
 	ttk.Label(
 		stats_table,
 		text = 'Processing interval setting:',
-	).grid(row = 1, column = 0, sticky = 'e')
-	interval_setting = ttk.Label(stats_table)
-	interval_setting.grid(row = 1, column = 1, sticky = 'e')
+	).grid(row = 0, column = 0, sticky = 'e')
+	interval_setting = ttk.Label(stats_table, font = 'TkFixedFont')
+	interval_setting.grid(row = 0, column = 1, sticky = 'e')
 	ttk.Label(
 		stats_table,
 		text = 'Measured processing interval:',
-	).grid(row = 2, column = 0, sticky = 'e')
-	measured_delta = ttk.Label(stats_table)
-	measured_delta.grid(row = 2, column = 1, sticky = 'e')
+	).grid(row = 1, column = 0, sticky = 'e')
+	measured_delta = ttk.Label(stats_table, font = 'TkFixedFont')
+	measured_delta.grid(row = 1, column = 1, sticky = 'e')
 	
 	return [
 		{
@@ -342,42 +390,58 @@ def build_processing_controls(
 				do_this_first.config(text = (
 					'Do this first!'
 					if state['nonpersistent']['selected_syringe'] == None
-					else 'Alignment complete ✅'
+					else 'Calibration complete ✅'
 				)),
 				certify.config(text = (
-					'✒ Certify that the barrel is aligned'
+					'✒ Calibrate the barrel and syringes'
 					if state['nonpersistent']['selected_syringe'] == None
-					else '(Re)-certify that the barrel is aligned'
+					else '(Re)-calibrate'
 				)),
 			)
 		},
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['processing_enabled']
+				lambda: state['nonpersistent']['selected_syringe'],
+				lambda: state['nonpersistent']['processing_enabled'],
 			],
 			'redraw': lambda: (
-				switch_variable.set(
-					state['nonpersistent']['processing_enabled']
+				switch.config(
+					text = 'Calibration required to start'
+					if state['nonpersistent']['selected_syringe'] == None
+					else
+						'\nPause processing\n'
+						if state['nonpersistent']['processing_enabled'] == True
+						else '\nStart processing\n',
+					background = '#555'
+					if state['nonpersistent']['selected_syringe'] == None
+					else
+						'#933'
+						if state['nonpersistent']['processing_enabled']
+						else '#393',
+					foreground = 'white',
 				)
 			)
 		},
 		{
 			'dependencies': [
-				lambda: state['processing_loop_interval']
+				lambda: state['nonpersistent']['processing_loop_interval']
 			],
 			'redraw': lambda: (
 				interval_setting.config(text = f'''{
-					str(state['processing_loop_interval'])
+					str(state['nonpersistent']['processing_loop_interval'])
 				} ms''')
 			)
 		},
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['processing_enabled']
+				lambda: state['nonpersistent']['processing_enabled'],
+				lambda: state['nonpersistent']['processing_loop_measured_delta']
 			],
 			'redraw': lambda: (
 				measured_delta.config(text = f'''{
-					str(state['processing_loop_measured_delta'])
+					str(
+						state['nonpersistent']['processing_loop_measured_delta']
+					).rjust(8)
 					if state['nonpersistent']['processing_enabled']
 					else '(Paused)'
 				} ms''')
