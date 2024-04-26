@@ -16,7 +16,6 @@ def setup_everything():
 	Timer(0, run_service, [state]).start()
 	
 	signal.signal(signal.SIGINT, lambda a, b: (
-		save_state_to_disk(state),
 		set_value(state['nonpersistent'], 'shutting_down', True),
 		gui_root.quit() if gui_root != None else None,
 	))

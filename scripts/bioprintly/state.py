@@ -1,9 +1,11 @@
 from copy import copy
 import json
 from os import environ
+import os
 from pathlib import Path
-from tkinter import Tk, Toplevel
-from typing import Any, Callable, Dict, List, Literal, Mapping, NotRequired, TypedDict, cast, get_args, TYPE_CHECKING
+import subprocess
+from tkinter import Tk, Toplevel, messagebox
+from typing import Any, Callable, Dict, List, Literal, Mapping, NotRequired, Tuple, TypedDict, cast, get_args, TYPE_CHECKING
 from util import unix_time_ms
 from pins import Bit, PinMappings
 
@@ -43,6 +45,7 @@ class Redrawable(TypedDict):
 
 class NonPersistentState(TypedDict):
 	savefile_path: str
+	savefile_last_write: int
 	gui_root: Tk | None
 	gui_redrawables: List[Redrawable]
 	gui_dependency_cache: Dict[str, Any]
@@ -59,13 +62,18 @@ class NonPersistentState(TypedDict):
 	rotator_steps_equivalent_to_90_degrees: int
 	actuator_travel_mm_per_ms: float
 	actuator_max_possible_extension_mm: float
+	actuator_is_homing: bool
+class ProcessInfo(TypedDict):
+	pid: int
+	ppid: int
 class GlobalState(TypedDict):
 	nonpersistent: NonPersistentState
+	process_info: ProcessInfo
 	ui_scale: float
 	pins: PinMappings
 	selected_syringe: SyringeNumber | None
 	actuator_position_mm: float | None
-	plunger_positions_mm: Dict[SyringeNumber, float]
+	plunger_positions_mm: Dict[str, float]
 	'''Distances from fully retracted actuator tip to each plunger's tip'''
 	command_queue: list[Command]
 	command_history: list[FinishedCommand]
@@ -85,6 +93,10 @@ def establish_savefile_path() -> str:
 	return f'{savefolder_path}/state.json'
 
 def save_state_to_disk(state: GlobalState):
+	'''
+	I believe this should only be called from the service thread to avoid race
+	conditions.
+	'''
 	savefile = open(state['nonpersistent']['savefile_path'], 'w')
 	persistent_state = cast(Dict, copy(state))
 	persistent_state.pop('nonpersistent')
@@ -93,20 +105,47 @@ def save_state_to_disk(state: GlobalState):
 		savefile,
 		indent = '\t'
 	)
+	state['nonpersistent']['savefile_last_write'] = unix_time_ms()
 
 def load_state_from_disk(state: GlobalState):
-	savefile = open(state['nonpersistent']['savefile_path'], 'r')
+	try:
+		savefile = open(state['nonpersistent']['savefile_path'], 'r')
+	except:
+		return
 	savedata = json.load(savefile)
 	for key, value in savedata.items():
 		if key == 'nonpersistent':
 			continue
+		if key == 'process_info':
+			dont_run_multiple_instances_at_once(value)
+			continue
 		if key in state:
 			state[key] = value
+
+def dont_run_multiple_instances_at_once(savefile_process_info: ProcessInfo):
+	if type(savefile_process_info['pid']) is not int:
+		raise Exception(f"Non-integer value for savefile_process_info['pid'] (bad savefile)")
+	
+	try:
+		ppid_for_savefile_pid = int(subprocess.check_output(
+			f'ps -o ppid= {savefile_process_info['pid']}',
+			shell = True,
+			text = True
+		).strip())
+	except:
+		return
+	if ppid_for_savefile_pid == savefile_process_info['ppid']:
+		messagebox.showerror(
+			message = 'Another instance of Bioprintly appears to be running',
+			detail = 'Not starting another instance to avoid conflicts.',
+		)
+		exit(1)
 
 def get_initial_global_state() -> GlobalState:
 	state: GlobalState = {
 		'nonpersistent': {
 			'savefile_path': establish_savefile_path(),
+			'savefile_last_write': 0,
 			'gui_root': None,
 			'gui_redrawables': [],
 			'gui_dependency_cache': {},
@@ -123,7 +162,9 @@ def get_initial_global_state() -> GlobalState:
 			'rotator_steps_equivalent_to_90_degrees': 235,
 			'actuator_travel_mm_per_ms': 15e-3,
 			'actuator_max_possible_extension_mm': 120.0,
+			'actuator_is_homing': False,
 		},
+		'process_info': { 'pid': os.getpid(), 'ppid': os.getppid() },
 		'ui_scale': 1.0,
 		'pins': cast(PinMappings, dict(map(
 			lambda name: (
@@ -144,10 +185,9 @@ def get_initial_global_state() -> GlobalState:
 		'next_command_ordinal': 0,
 	}
 	
-	try:
-		load_state_from_disk(state)
-	except:
-		pass
+	load_state_from_disk(state)
+	# Save process info to prevent multiple instances from running at once
+	save_state_to_disk(state)
 	
 	return state
 

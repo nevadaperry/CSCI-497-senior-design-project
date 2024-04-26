@@ -1,7 +1,8 @@
+from threading import Timer
 from typing import get_args
-from pins import retract_actuator_fully
+from pins import home_the_actuator
 from util import set_value, maximize_tk_window
-from state import GlobalState, SyringeNumber
+from state import GlobalState, SyringeNumber, save_state_to_disk
 from tkinter import Toplevel, messagebox, ttk
 
 def build_calibration_gui(state: GlobalState):
@@ -22,65 +23,74 @@ def build_calibration_gui(state: GlobalState):
 	
 	redrawables = state['nonpersistent']['modal_redrawables']
 	
-	actuator_row = ttk.Frame(outermost)
-	actuator_row.pack()
+	status_grid = ttk.Frame(outermost)
+	status_grid.pack()
+	status_grid.columnconfigure(0, weight = 1, uniform = 'status_grid')
+	status_grid.columnconfigure(1, weight = 1, uniform = 'status_grid')
+	status_grid.columnconfigure(2, weight = 1, uniform = 'status_grid')
+	
 	ttk.Label(
-		actuator_row,
+		status_grid,
 		text = f'Actuator position:'
-	).pack(side = 'left')
+	).grid(row = 0, column = 0, sticky = 'e')
 	actuator_position_label = ttk.Label(
-		actuator_row,
+		status_grid,
 		text = get_actuator_position_text(state),
 		font = 'TkFixedFont'
 	)
-	actuator_position_label.pack(side = 'left')
+	actuator_position_label.grid(row = 0, column = 1)
 	ttk.Button(
-		actuator_row,
+		status_grid,
 		text = 'Home the actuator',
-		command = lambda: retract_actuator_fully(state),
-	).pack(side = 'left')
+		command = lambda: Timer(0, home_the_actuator, [state]).start(),
+	).grid(row = 0, column = 2, sticky = 'w')
 	redrawables.append({
 		'dependencies': [
-			lambda: state['actuator_position_mm']
+			lambda: get_actuator_position_text(state),
 		],
-		'redraw': lambda: plunger_position_label.config(
+		'redraw': lambda: actuator_position_label.config(
 			text = get_actuator_position_text(state)
 		),
 	})
 	
 	# todo: handwheel buttons
+	# todo: buttons to certify the selected syringe (they only unlock after the
+	# plunger positions are calibrated)
 	
 	for syringe_number in get_args(SyringeNumber):
-		syringe_row = ttk.Frame(outermost)
-		syringe_row.pack()
 		ttk.Label(
-			syringe_row,
+			status_grid,
 			text = f'Syringe {syringe_number}\'s plunger position:'
-		).pack(side = 'left')
+		).grid(row = syringe_number, column = 0, sticky = 'e')
 		plunger_position_label = ttk.Label(
-			syringe_row,
+			status_grid,
 			text = get_plunger_position_text(state, syringe_number),
 			font = 'TkFixedFont'
 		)
-		plunger_position_label.pack(side = 'left')
+		plunger_position_label.grid(row = syringe_number, column = 1)
 		
 		record_button = ttk.Button(
-			syringe_row,
+			status_grid,
 			text = f'Record actuator tip position as plunger position',
 			state = 'disabled',
 			command = lambda syringe_number=syringe_number: set_value(
 				state['plunger_positions_mm'],
-				syringe_number,
+				str(syringe_number),
 				state['actuator_position_mm'],
 			),
 		)
-		record_button.pack(side = 'left')
+		record_button.grid(row = syringe_number, column = 2, sticky = 'w')
 		
 		redrawables.append({
 			'dependencies': [
-				lambda: state['plunger_positions_mm']
+				lambda syringe_number=syringe_number: (
+					get_plunger_position_text(state, syringe_number)
+				),
 			],
-			'redraw': lambda syringe_number=syringe_number: (
+			'redraw': lambda
+				plunger_position_label=plunger_position_label,
+				syringe_number=syringe_number,
+			: (
 				plunger_position_label.config(
 					text = get_plunger_position_text(state, syringe_number)
 				),
@@ -88,12 +98,16 @@ def build_calibration_gui(state: GlobalState):
 		})
 		redrawables.append({
 			'dependencies': [
-				lambda: state['actuator_position_mm']
+				lambda: state['actuator_position_mm'],
+				lambda: state['nonpersistent']['actuator_is_homing'],
 			],
 			'redraw': lambda record_button=record_button: (
 				record_button.config(state = (
 					'disabled'
-					if state['actuator_position_mm'] == None
+					if (
+						state['actuator_position_mm'] == None
+						or state['nonpersistent']['actuator_is_homing'] == True
+					)
 					else 'normal'
 				)),
 			),
@@ -107,22 +121,32 @@ def build_calibration_gui(state: GlobalState):
 
 def get_actuator_position_text(state: GlobalState) -> str:
 	return (
-		'⚠️ Unknown'
-		if state['actuator_position_mm'] == None
-		else f'{state['actuator_position_mm']} mm'
+		'Homing...'
+		if state['nonpersistent']['actuator_is_homing'] == True
+		else
+			'⚠️ Unknown'
+			if state['actuator_position_mm'] == None
+			else f'{state['actuator_position_mm']} mm'
 	)
 
-def get_plunger_position_text(state: GlobalState, number: SyringeNumber) -> str:
+def get_plunger_position_text(
+	state: GlobalState,
+	syringe_number: SyringeNumber
+) -> str:
 	return (
 		'⚠️ Unknown'
-		if number not in state['plunger_positions_mm']
-		else f'{state['plunger_positions_mm'][number]} mm'
+		if str(syringe_number) not in state['plunger_positions_mm']
+		else f'{state['plunger_positions_mm'][str(syringe_number)]} mm'
 	)
 
 def calibration_is_complete(state: GlobalState) -> bool:
-	return state['selected_syringe'] != None and all(
-		(number in state['plunger_positions_mm'])
-		for number in get_args(SyringeNumber)
+	return (
+		state['selected_syringe'] != None
+		and state['actuator_position_mm'] != None
+		and all(
+			str(syringe_number) in state['plunger_positions_mm']
+			for syringe_number in get_args(SyringeNumber)
+		)
 	)
 
 def close_calibration_gui(state: GlobalState):

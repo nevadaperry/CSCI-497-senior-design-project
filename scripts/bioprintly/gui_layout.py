@@ -1,12 +1,12 @@
 from threading import Timer
 from pins import InputOutput, PinMappings, PinNumber, setup_pins
-from gui_calibration import build_calibration_gui
+from gui_calibration import build_calibration_gui, calibration_is_complete
 from state import CommandSpecifics, GlobalState, SyringeNumber, enqueue_command, save_state_to_disk, Redrawable
 from tkinter import StringVar, messagebox
 import tkinter
 import tkinter as ttk
-from typing import Callable, List, Sequence, Tuple, TypedDict, get_args
-from util import friendly_timestamp, hsv_to_hex, intersperse, set_value
+from typing import Any, Callable, List, Sequence, Tuple, TypedDict, get_args
+from util import friendly_timestamp, hsv_to_hex, intersperse, set_value, stringify_primitive
 
 class ScaledConstants(TypedDict):
 	control_frames_pad_x: float
@@ -116,7 +116,6 @@ def build_ui_scale_control(
 				'ui_scale',
 				float(option_menu_variable.get().split('%')[0]) / 100,
 			),
-			save_state_to_disk(state),
 			set_value(
 				state['nonpersistent'],
 				'reopening_gui',
@@ -139,6 +138,7 @@ def build_rotator_controls(
 	parent: tkinter.Widget,
 	scaled_constants: ScaledConstants,
 ) -> List[Redrawable]:
+	redrawables: List[Redrawable] = []
 	frame = ttk.LabelFrame(
 		parent,
 		text = 'Rotator',
@@ -149,32 +149,57 @@ def build_rotator_controls(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	selected_syringe_label = ttk.Label(frame)
-	selected_syringe_label.pack()
+	
+	selected_syringe_row = ttk.Frame(frame)
+	selected_syringe_row.pack()
+	ttk.Label(
+		selected_syringe_row,
+		text = 'Selected syringe:',
+	).pack(side = 'left')
+	selected_syringe_label = ttk.Label(
+		selected_syringe_row,
+		font = 'TkFixedFont',
+	)
+	selected_syringe_label.pack(side = 'left')
+	redrawables.append({
+		'dependencies': [
+			lambda: state['selected_syringe']
+		],
+		'redraw': lambda: (
+			selected_syringe_label.config(text = (
+				state['selected_syringe']
+				if state['selected_syringe'] != None
+				else '⚠️ Unknown; awaiting calibration'
+			)),
+		)
+	})
+	
 	for i in get_args(SyringeNumber):
-		ttk.Button(
+		switch_to_syringe_button = ttk.Button(
 			frame,
 			text = f'Switch to syringe {i}',
 			command = lambda i=i: enqueue_command(state, {
 				'verb': 'Rotate',
 				'target_syringe': i,
 			}),
-		).pack()
-
-	return [
-		{
+		)
+		switch_to_syringe_button.pack()
+		redrawables.append({
 			'dependencies': [
-				lambda: state['selected_syringe']
+				lambda: state['nonpersistent']['processing_enabled']
 			],
-			'redraw': lambda: (
-				selected_syringe_label.config(text = f'''Selected syringe: {
-					state['selected_syringe']
-					if state['selected_syringe'] != None
-					else '(Unknown; awaiting calibration)'
-				}'''),
+			'redraw': lambda
+				switch_to_syringe_button=switch_to_syringe_button
+			: (
+				switch_to_syringe_button.config(
+					state = 'disabled'
+					if state['nonpersistent']['processing_enabled'] == True
+					else 'normal'
+				),
 			)
-		}
-	]
+		})
+
+	return redrawables
 
 def build_actuator_controls(
 	state: GlobalState,
@@ -182,6 +207,7 @@ def build_actuator_controls(
 	scaled_constants: ScaledConstants,
 ) -> List[Redrawable]:
 	nonpersistent = state['nonpersistent']
+	redrawables: List[Redrawable] = []
 	
 	frame = ttk.LabelFrame(
 		parent,
@@ -193,21 +219,38 @@ def build_actuator_controls(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	actuator_position_frame = ttk.Frame(frame)
-	actuator_position_frame.pack()
+	
+	actuator_position_row = ttk.Frame(frame)
+	actuator_position_row.pack()
 	ttk.Label(
-		actuator_position_frame,
+		actuator_position_row,
 		text = 'Actuator position:'
 	).pack(side = 'left')
 	actuator_position_label = ttk.Label(
-		actuator_position_frame,
+		actuator_position_row,
 		font = 'TkFixedFont',
 	)
 	actuator_position_label.pack(side = 'left')
+	redrawables.append({
+		'dependencies': [
+			lambda: state['actuator_position_mm']
+		],
+		'redraw': lambda: (
+			actuator_position_label.config(text = (
+				f'''{
+					state['actuator_position_mm']
+				} mm extended'''
+				if state['actuator_position_mm'] != None
+				else '(Unknown; awaiting calibration)'
+			)),
+		)
+	})
+	
 	for i, distance in enumerate([1, 5, 20]):
 		row = ttk.Frame(frame)
 		row.pack()
-		ttk.Button(
+		
+		retract_button = ttk.Button(
 			row,
 			text = f'Retract actuator {distance} mm',
 			command = lambda distance=distance: enqueue_command(state, {
@@ -217,8 +260,22 @@ def build_actuator_controls(
 					distance / nonpersistent['actuator_travel_mm_per_ms'],
 				),
 			}),
-		).grid(row = i, column = 0)
-		ttk.Button(
+		)
+		retract_button.grid(row = i, column = 0)
+		redrawables.append({
+			'dependencies': [
+				lambda: nonpersistent['processing_enabled']
+			],
+			'redraw': lambda retract_button=retract_button: (
+				retract_button.config(
+					state = 'disabled'
+					if nonpersistent['processing_enabled'] == True
+					else 'normal'
+				),
+			)
+		})
+		
+		extend_button = ttk.Button(
 			row,
 			text = f'Extend actuator {distance} mm',
 			command = lambda distance=distance: enqueue_command(state, {
@@ -228,24 +285,22 @@ def build_actuator_controls(
 					distance / nonpersistent['actuator_travel_mm_per_ms'],
 				),
 			}),
-		).grid(row = i, column = 1)
-
-	return [
-		{
+		)
+		extend_button.grid(row = i, column = 1)
+		redrawables.append({
 			'dependencies': [
-				lambda: state['actuator_position_mm']
+				lambda: nonpersistent['processing_enabled']
 			],
-			'redraw': lambda: (
-				actuator_position_label.config(text = (
-					f'''{
-						state['actuator_position_mm']
-					} mm extended'''
-					if state['actuator_position_mm'] != None
-					else '(Unknown; awaiting calibration)'
-				)),
+			'redraw': lambda extend_button=extend_button: (
+				extend_button.config(
+					state = 'disabled'
+					if nonpersistent['processing_enabled'] == True
+					else 'normal'
+				),
 			)
-		}
-	]
+		})
+
+	return redrawables
 
 def build_pin_io_controls(
 	state: GlobalState,
@@ -272,7 +327,7 @@ def build_pin_io_controls(
 	ttk.Label(frame, text = 'Type').grid(row = 0, column = 2)
 	ttk.Label(frame, text = 'Live value').grid(row = 0, column = 3)
 	
-	redrawable_rows = []
+	redrawables = []
 	for i, name in enumerate(PinMappings.__annotations__.keys()):
 		grid_row = i + 1
 		name_label = ttk.Label(
@@ -330,16 +385,42 @@ def build_pin_io_controls(
 		)
 		live_value.grid(row = grid_row, column = 3)
 		
-		redrawable_rows.append({
-			'dependencies': [lambda name=name: state['pins'][name]['value']],
+		redrawables.append({
+			'dependencies': [
+				lambda: state['nonpersistent']['processing_enabled'],
+			],
+			'redraw': lambda pin_number_dropdown=pin_number_dropdown: (
+				pin_number_dropdown.config(
+					state = 'disabled'
+					if state['nonpersistent']['processing_enabled']
+					else 'normal',
+				),
+			),
+		})
+		redrawables.append({
+			'dependencies': [
+				lambda: state['nonpersistent']['processing_enabled'],
+			],
+			'redraw': lambda io_type_dropdown=io_type_dropdown: (
+				io_type_dropdown.config(
+					state = 'disabled'
+					if state['nonpersistent']['processing_enabled']
+					else 'normal',
+				),
+			),
+		})
+		redrawables.append({
+			'dependencies': [
+				lambda name=name: state['pins'][name]['value'],
+			],
 			'redraw': lambda name=name, live_value=live_value: (
 				live_value.config(
-					text = state['pins'][name]['value']
+					text = state['pins'][name]['value'],
 				),
 			),
 		})
 	
-	return redrawable_rows
+	return redrawables
 
 def build_processing_controls(
 	state: GlobalState,
@@ -406,41 +487,57 @@ def build_processing_controls(
 	return [
 		{
 			'dependencies': [
+				lambda: state['nonpersistent']['processing_enabled'],
 				lambda: state['selected_syringe'],
 				lambda: state['actuator_position_mm'],
 			],
 			'redraw': lambda: (
-				start_calibration.config(text = (
-					'✒ Calibrate the barrel and syringes'
+				start_calibration.config(
+					state = 'disabled'
+					if state['nonpersistent']['processing_enabled'] == True
+					else 'normal',
+					
+					text = '✒ Calibrate the barrel and syringes'
 					if (
 						state['selected_syringe'] == None
 						or state['actuator_position_mm'] == None
 					)
-					else '(Re)-calibrate the barrel and syringes'
-				)),
+					else '(Re)-calibrate the barrel and syringes',
+				),
 			)
 		},
 		{
 			'dependencies': [
-				lambda: state['selected_syringe'],
-				lambda: state['actuator_position_mm'],
+				lambda: calibration_is_complete(state),
+				lambda: state['nonpersistent']['modal'] != None,
 				lambda: state['nonpersistent']['processing_enabled'],
 			],
 			'redraw': lambda: (
 				switch.config(
-					text = '\nPause processing\n'
-					if state['nonpersistent']['processing_enabled'] == True
-					else '\nStart processing\n',
+					state = 'disabled'
+					if (
+						not calibration_is_complete(state)
+						or state['nonpersistent']['modal'] != None
+					)
+					else 'normal',
+					
+					text = '(Calibration required)'
+					if not calibration_is_complete(state)
+					else
+						'\nPause processing\n'
+						if state['nonpersistent']['processing_enabled'] == True
+						else '\nStart processing\n',
 					
 					background = '#555'
 					if (
-						state['selected_syringe'] == None
-						or state['actuator_position_mm'] == None
+						not calibration_is_complete(state)
+						or state['nonpersistent']['modal'] != None
 					)
 					else
 						'#933'
 						if state['nonpersistent']['processing_enabled']
 						else '#393',
+					
 					foreground = 'white',
 				)
 			)
@@ -652,18 +749,18 @@ def build_clear_history_button(
 				lambda: state['nonpersistent']['processing_enabled'],
 			],
 			'redraw': lambda: (
-				button.config(state = (
-					'normal'
+				button.config(
+					state = 'disabled'
 					if state['nonpersistent']['processing_enabled']
-					else 'disabled'
-				)),
+					else 'normal'
+				),
 			),
 		},
 	]
 
 def friendly_specifics(specifics: CommandSpecifics, pad_left = '') -> str:
 	return '\n'.join(map(
-		lambda item: f'{pad_left}{item[0]}: {item[1]}',
+		lambda item: f'{pad_left}{item[0]}: {stringify_primitive(item[1])}',
 		filter(
 			lambda item: item[0] != 'verb',
 			specifics.items(),

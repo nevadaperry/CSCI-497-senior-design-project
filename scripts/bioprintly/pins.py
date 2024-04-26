@@ -107,9 +107,12 @@ def zero_out_pins(state: GlobalState):
 	for pin_name, pin in state['pins'].items():
 		cast(Pin, pin)['value'] = 0
 
-def retract_actuator_fully(state: GlobalState):
+def home_the_actuator(state: GlobalState):
 	'''Only for use in internal logic; not a substitute for CommandActuate'''
 	nonpersistent = state['nonpersistent']
+	if nonpersistent['actuator_is_homing'] == True:
+		return
+	nonpersistent['actuator_is_homing'] = True
 	write_pin(state, 'actuator_retract', 1)
 	sleep(
 		nonpersistent['actuator_max_possible_extension_mm']
@@ -118,3 +121,4 @@ def retract_actuator_fully(state: GlobalState):
 	)
 	write_pin(state, 'actuator_retract', 0)
 	state['actuator_position_mm'] = 0
+	nonpersistent['actuator_is_homing'] = False

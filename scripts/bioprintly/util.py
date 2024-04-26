@@ -18,7 +18,7 @@ def friendly_timestamp(
 		'%I:%M:%S %p on %a, %b %d, %Y' if include_date else '%I:%M:%S %p'
 	)
 
-def set_value(dict: Any, key: Any, value: Any):
+def set_value(dict: Any, key: str, value: Any):
 	'''
 	Useful for modifying values from inside multi-statement lambdas, which is
 	normally not allowed.
@@ -62,3 +62,9 @@ def maximize_tk_window(root: Tk | Toplevel):
 			Timer(0, lambda: root.state('zoomed')).start()
 	except:
 		pass
+
+def stringify_primitive(value: Any) -> str:
+	if type(value) is float:
+		return str(round(value, 1))
+	else:
+		return str(value)

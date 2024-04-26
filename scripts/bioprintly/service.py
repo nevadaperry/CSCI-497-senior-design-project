@@ -18,13 +18,16 @@ def run_service(state: GlobalState):
 		else:
 			zero_out_pins(state)
 		
+		if unix_time_ms() >= nonpersistent['savefile_last_write'] + 2000:
+			save_state_to_disk(state)
+		
 		sleep(max(0,
 			nonpersistent['processing_loop_interval']
-				- (unix_time_ms() - nonpersistent['processing_loop_last_start'])
+			- (unix_time_ms() - nonpersistent['processing_loop_last_start'])
 		) / 1e3)
 	
-	save_state_to_disk(state)
 	zero_out_pins(state)
+	save_state_to_disk(state)
 
 def process_commands(state: GlobalState):
 	nonpersistent = state['nonpersistent']

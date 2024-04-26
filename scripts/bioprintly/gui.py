@@ -80,7 +80,6 @@ def confirm_close_gui(state: GlobalState):
 			message = 'Are you sure you want to close? This will stop command processing.',
 		)
 	):
-		save_state_to_disk(state)
 		state['nonpersistent']['shutting_down'] = True
 		state['nonpersistent']['gui_root'].destroy()
 
@@ -108,4 +107,6 @@ def scale_fonts_by_ui_scale(state: GlobalState):
 			default_font_sizes[font_name] = current_size
 		
 		default_size = default_font_sizes[font_name]
+		if font_name == 'TkFixedFont':
+			default_size *= 1.12
 		font.configure(size = round(default_size * state['ui_scale']))
