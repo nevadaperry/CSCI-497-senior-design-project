@@ -5,7 +5,7 @@ from tkinter.font import nametofont
 from gui_layout import build_gui_layout
 from state import GlobalState, save_state_to_disk
 from tkinter import Tk, ttk, messagebox
-from util import deep_equals, unix_time_ms
+from util import deep_equals, unix_time_ms, maximize_tk_window
 
 def run_gui(state: GlobalState):
 	gui_root = state['nonpersistent']['gui_root'] = Tk()
@@ -22,39 +22,40 @@ def run_gui(state: GlobalState):
 	
 	gui_root.after(0, update_gui_repeatedly, state)
 	
-	try:
-		gui_root.state('zoomed')
-		# Workaround for zoom not working after re-opening the root window
-		if gui_root.state() != 'zoomed':
-			Timer(0, lambda: gui_root.state('zoomed')).start()
-	except:
-		pass
+	maximize_tk_window(gui_root)
 	
 	gui_root.mainloop()
 
 def update_gui_repeatedly(state: GlobalState):
 	gui_update_start_time = unix_time_ms()
 	gui_root = state['nonpersistent']['gui_root']
-	gui_redrawables = state['nonpersistent']['gui_redrawables']
-	gui_dependency_cache = state['nonpersistent']['gui_dependency_cache']
 	if gui_root == None:
 		raise Exception(f'update_gui_repeatedly: gui_root == None')
 	
-	for i, redrawable in enumerate(gui_redrawables):
-		for j, dependency in enumerate(redrawable['dependencies']):
-			cache_key = f'{i},{j}'
-			cur_value = dependency()
-			
-			if cache_key in gui_dependency_cache:
-				prev_value = gui_dependency_cache[cache_key]
-				if not deep_equals(cur_value, prev_value):
+	gui_redrawables = state['nonpersistent']['gui_redrawables']
+	gui_dependency_cache = state['nonpersistent']['gui_dependency_cache']
+	modal_redrawables = state['nonpersistent']['modal_redrawables']
+	modal_dependency_cache = state['nonpersistent']['modal_dependency_cache']
+	
+	for (redrawables, dependency_cache) in [
+		(gui_redrawables, gui_dependency_cache),
+		(modal_redrawables, modal_dependency_cache),
+	]:
+		for i, redrawable in enumerate(redrawables):
+			for j, dependency in enumerate(redrawable['dependencies']):
+				cache_key = f'{i},{j}'
+				cur_value = dependency()
+				
+				if cache_key in dependency_cache:
+					prev_value = dependency_cache[cache_key]
+					if not deep_equals(cur_value, prev_value):
+						redrawable['redraw']()
+						dependency_cache[cache_key] = deepcopy(cur_value)
+						break
+				else:
 					redrawable['redraw']()
-					gui_dependency_cache[cache_key] = deepcopy(cur_value)
+					dependency_cache[cache_key] = deepcopy(cur_value)
 					break
-			else:
-				redrawable['redraw']()
-				gui_dependency_cache[cache_key] = deepcopy(cur_value)
-				break
 	
 	if state['nonpersistent']['reopening_gui'] == True:
 		gui_root.destroy()
@@ -76,8 +77,7 @@ def confirm_close_gui(state: GlobalState):
 	if (
 		state['nonpersistent']['processing_enabled'] == False
 		or messagebox.askokcancel(
-			'Are you sure?',
-			'Are you sure you want to close? This will stop command processing.',
+			message = 'Are you sure you want to close? This will stop command processing.',
 		)
 	):
 		save_state_to_disk(state)
@@ -97,6 +97,7 @@ TK_STANDARD_FONT_NAMES = [
 ]
 
 def scale_fonts_by_ui_scale(state: GlobalState):
+	'''Idempotent; based on each font's default size'''
 	default_font_sizes = state['nonpersistent']['default_font_sizes']
 	
 	for font_name in TK_STANDARD_FONT_NAMES:

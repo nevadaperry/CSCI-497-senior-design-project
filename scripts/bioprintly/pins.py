@@ -1,4 +1,5 @@
 from __future__ import annotations
+from time import sleep
 from types import SimpleNamespace
 from typing import Iterable, Literal, Tuple, TypedDict, cast, get_args, TYPE_CHECKING
 if TYPE_CHECKING:
@@ -21,8 +22,8 @@ class PinMappings(TypedDict):
 	heater_2: Pin
 	heater_3: Pin
 	heater_4: Pin
-	actuator_direction: Pin
-	actuator_step: Pin
+	actuator_retract: Pin
+	actuator_extend: Pin
 	uv_light_1: Pin
 	uv_light_2: Pin
 	uv_light_3: Pin
@@ -105,3 +106,15 @@ def zero_out_pins(state: GlobalState):
 	
 	for pin_name, pin in state['pins'].items():
 		cast(Pin, pin)['value'] = 0
+
+def retract_actuator_fully(state: GlobalState):
+	'''Only for use in internal logic; not a substitute for CommandActuate'''
+	nonpersistent = state['nonpersistent']
+	write_pin(state, 'actuator_retract', 1)
+	sleep(
+		nonpersistent['actuator_max_possible_extension_mm']
+		/ nonpersistent['actuator_travel_mm_per_ms']
+		/ 1000
+	)
+	write_pin(state, 'actuator_retract', 0)
+	state['actuator_position_mm'] = 0

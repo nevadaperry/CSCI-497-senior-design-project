@@ -1,4 +1,6 @@
+from threading import Timer
 from pins import InputOutput, PinMappings, PinNumber, setup_pins
+from gui_calibration import build_calibration_gui
 from state import CommandSpecifics, GlobalState, SyringeNumber, enqueue_command, save_state_to_disk, Redrawable
 from tkinter import StringVar, messagebox
 import tkinter
@@ -32,6 +34,11 @@ def build_gui_layout(state: GlobalState) -> List[Redrawable]:
 		scaled_constants,
 	)
 	redrawables += build_command_queue(state, middle_column, scaled_constants)
+	redrawables += build_delete_last_enqueued_command_button(
+		state,
+		middle_column,
+		scaled_constants,
+	)
 	redrawables += build_command_history(state, right_column, scaled_constants)
 	redrawables += build_clear_history_button(
 		state,
@@ -42,14 +49,12 @@ def build_gui_layout(state: GlobalState) -> List[Redrawable]:
 	return redrawables
 
 def build_three_columns(state: GlobalState):
-	outermost_pad_x = 4 * state['ui_scale']
-	outermost_pad_y = 4 * state['ui_scale']
 	outermost = ttk.Frame(state['nonpersistent']['gui_root'])
 	outermost.pack(
 		fill = 'both',
 		expand = True,
-		padx = outermost_pad_x,
-		pady = outermost_pad_y,
+		padx = 4 * state['ui_scale'],
+		pady = 4 * state['ui_scale'],
 	)
 	outermost.grid_rowconfigure(0, weight = 1)
 	for i in [0, 1, 2]:
@@ -159,11 +164,13 @@ def build_rotator_controls(
 	return [
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['selected_syringe']
+				lambda: state['selected_syringe']
 			],
 			'redraw': lambda: (
 				selected_syringe_label.config(text = f'''Selected syringe: {
-					state['nonpersistent']['selected_syringe']
+					state['selected_syringe']
+					if state['selected_syringe'] != None
+					else '(Unknown; awaiting calibration)'
 				}'''),
 			)
 		}
@@ -174,6 +181,8 @@ def build_actuator_controls(
 	parent: tkinter.Widget,
 	scaled_constants: ScaledConstants,
 ) -> List[Redrawable]:
+	nonpersistent = state['nonpersistent']
+	
 	frame = ttk.LabelFrame(
 		parent,
 		text = 'Actuator',
@@ -184,32 +193,54 @@ def build_actuator_controls(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	actuator_position_label = ttk.Label(frame)
-	actuator_position_label.pack()
-	ttk.Button(
-		frame,
-		text = f'Extend actuator 1 mm',
-		command = lambda: enqueue_command(state, {
-			'verb': 'Actuate',
-			'direction': 0,
-			'milliseconds_needed_total': round(
-				1 / state['nonpersistent']['actuator_mm_per_ms'],
-			),
-		}),
-	).pack()
+	actuator_position_frame = ttk.Frame(frame)
+	actuator_position_frame.pack()
+	ttk.Label(
+		actuator_position_frame,
+		text = 'Actuator position:'
+	).pack(side = 'left')
+	actuator_position_label = ttk.Label(
+		actuator_position_frame,
+		font = 'TkFixedFont',
+	)
+	actuator_position_label.pack(side = 'left')
+	for i, distance in enumerate([1, 5, 20]):
+		row = ttk.Frame(frame)
+		row.pack()
+		ttk.Button(
+			row,
+			text = f'Retract actuator {distance} mm',
+			command = lambda distance=distance: enqueue_command(state, {
+				'verb': 'Actuate',
+				'direction': 0,
+				'travel_mm_needed_total': round(
+					distance / nonpersistent['actuator_travel_mm_per_ms'],
+				),
+			}),
+		).grid(row = i, column = 0)
+		ttk.Button(
+			row,
+			text = f'Extend actuator {distance} mm',
+			command = lambda distance=distance: enqueue_command(state, {
+				'verb': 'Actuate',
+				'direction': 1,
+				'travel_mm_needed_total': round(
+					distance / nonpersistent['actuator_travel_mm_per_ms'],
+				),
+			}),
+		).grid(row = i, column = 1)
 
-	return []
 	return [
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['actuator_position_mm']
+				lambda: state['actuator_position_mm']
 			],
 			'redraw': lambda: (
-				actuator_position_label.config(text = 'Actuator position: ' + (
+				actuator_position_label.config(text = (
 					f'''{
-						state['nonpersistent']['actuator_position_mm']
+						state['actuator_position_mm']
 					} mm extended'''
-					if state['nonpersistent']['actuator_position_mm'] != None
+					if state['actuator_position_mm'] != None
 					else '(Unknown; awaiting calibration)'
 				)),
 			)
@@ -315,31 +346,25 @@ def build_processing_controls(
 	parent: tkinter.Widget,
 	scaled_constants: ScaledConstants,
 ) -> List[Redrawable]:
-	do_this_first = ttk.LabelFrame(
+	do_this_before_each_run = ttk.LabelFrame(
 		parent,
-		labelanchor = 'n'
+		labelanchor = 'n',
+		text = 'Do this before each run!',
 	)
-	do_this_first.pack(
+	do_this_before_each_run.pack(
 		fill = 'x',
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
-	certify = ttk.Button(
-		do_this_first,
-		command = lambda: [
-			set_value(
-				state['nonpersistent'],
-				'selected_syringe',
-				1,
-			)
-			if messagebox.askokcancel(
-				message = 'By clicking OK, you certify that you\'ve lined up the barrel with the actuator over the syringe marked #1.',
-				detail = 'This is how this program can know the starting angle of the barrel.'
-			)
-			else None
-		],
+	start_calibration = ttk.Button(
+		do_this_before_each_run,
+		command = lambda: (
+			build_calibration_gui(state)
+			if state['nonpersistent']['modal'] == None
+			else state['nonpersistent']['modal'].focus_force()
+		),
 	)
-	certify.pack()
+	start_calibration.pack()
 	controls = ttk.LabelFrame(
 		parent,
 		text = 'Processing',
@@ -356,13 +381,10 @@ def build_processing_controls(
 		tkmacosx = tkinter
 	switch = tkmacosx.Button(
 		controls,
-		command = lambda: (
-			set_value(
-				state['nonpersistent'],
-				'processing_enabled',
-				not state['nonpersistent']['processing_enabled'],
-			) if state['nonpersistent']['selected_syringe'] != None
-			else None
+		command = lambda: set_value(
+			state['nonpersistent'],
+			'processing_enabled',
+			not state['nonpersistent']['processing_enabled'],
 		),
 	)
 	switch.pack()
@@ -384,36 +406,37 @@ def build_processing_controls(
 	return [
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['selected_syringe']
+				lambda: state['selected_syringe'],
+				lambda: state['actuator_position_mm'],
 			],
 			'redraw': lambda: (
-				do_this_first.config(text = (
-					'Do this first!'
-					if state['nonpersistent']['selected_syringe'] == None
-					else 'Calibration complete ✅'
-				)),
-				certify.config(text = (
+				start_calibration.config(text = (
 					'✒ Calibrate the barrel and syringes'
-					if state['nonpersistent']['selected_syringe'] == None
-					else '(Re)-calibrate'
+					if (
+						state['selected_syringe'] == None
+						or state['actuator_position_mm'] == None
+					)
+					else '(Re)-calibrate the barrel and syringes'
 				)),
 			)
 		},
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['selected_syringe'],
+				lambda: state['selected_syringe'],
+				lambda: state['actuator_position_mm'],
 				lambda: state['nonpersistent']['processing_enabled'],
 			],
 			'redraw': lambda: (
 				switch.config(
-					text = 'Calibration required to start'
-					if state['nonpersistent']['selected_syringe'] == None
-					else
-						'\nPause processing\n'
-						if state['nonpersistent']['processing_enabled'] == True
-						else '\nStart processing\n',
+					text = '\nPause processing\n'
+					if state['nonpersistent']['processing_enabled'] == True
+					else '\nStart processing\n',
+					
 					background = '#555'
-					if state['nonpersistent']['selected_syringe'] == None
+					if (
+						state['selected_syringe'] == None
+						or state['actuator_position_mm'] == None
+					)
 					else
 						'#933'
 						if state['nonpersistent']['processing_enabled']
@@ -547,6 +570,34 @@ def build_command_queue(
 		)),
 		f'\n{scrollable_text_pad_left}(Empty)',
 	)
+def build_delete_last_enqueued_command_button(
+	state: GlobalState,
+	parent: tkinter.Widget,
+	scaled_constants: ScaledConstants,
+) -> List[Redrawable]:
+	button = ttk.Button(
+		parent,
+		text = 'Delete last enqueued command (from the bottom)',
+		command = lambda: (
+			set_value(state, 'command_queue', state['command_queue'][:-1]),
+		),
+	)
+	button.pack()
+
+	return [
+		{
+			'dependencies': [
+				lambda: state['nonpersistent']['processing_enabled'],
+			],
+			'redraw': lambda: (
+				button.config(state = (
+					'disabled'
+					if state['nonpersistent']['processing_enabled']
+					else 'normal'
+				)),
+			),
+		},
+	]
 
 def build_command_history(
 	state: GlobalState,
@@ -588,15 +639,27 @@ def build_clear_history_button(
 		command = lambda: [
 			state['command_history'].clear()
 			if messagebox.askokcancel(
-				'Are you sure?',
-				'Are you confident that this is the right decision',
+				message = 'Are you sure you want to clear the command history?',
 			)
 			else None
 		],
 	)
 	button.pack()
 
-	return []
+	return [
+		{
+			'dependencies': [
+				lambda: state['nonpersistent']['processing_enabled'],
+			],
+			'redraw': lambda: (
+				button.config(state = (
+					'normal'
+					if state['nonpersistent']['processing_enabled']
+					else 'disabled'
+				)),
+			),
+		},
+	]
 
 def friendly_specifics(specifics: CommandSpecifics, pad_left = '') -> str:
 	return '\n'.join(map(

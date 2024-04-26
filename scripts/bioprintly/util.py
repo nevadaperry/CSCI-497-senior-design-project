@@ -2,7 +2,9 @@ from colorsys import hsv_to_rgb
 from datetime import datetime
 import json
 from math import floor
+from threading import Timer
 from time import time_ns
+from tkinter import Tk, Toplevel
 from typing import Any, List, Literal, cast
 
 def unix_time_ms() -> int:
@@ -51,3 +53,12 @@ def flatten(two_level_list: List[List[Any]]) -> List[Any]:
 		for value in inner_list:
 			result.append(value)
 	return result
+
+def maximize_tk_window(root: Tk | Toplevel):
+	try:
+		root.state('zoomed')
+		# Workaround for zoom not working after re-opening the root window
+		if root.state() != 'zoomed':
+			Timer(0, lambda: root.state('zoomed')).start()
+	except:
+		pass

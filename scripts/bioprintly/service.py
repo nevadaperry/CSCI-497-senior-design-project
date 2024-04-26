@@ -15,6 +15,8 @@ def run_service(state: GlobalState):
 		
 		if nonpersistent['processing_enabled'] == True:
 			process_commands(state)
+		else:
+			zero_out_pins(state)
 		
 		sleep(max(0,
 			nonpersistent['processing_loop_interval']
@@ -27,10 +29,17 @@ def run_service(state: GlobalState):
 def process_commands(state: GlobalState):
 	nonpersistent = state['nonpersistent']
 	
-	if nonpersistent['selected_syringe'] == None:
+	if state['selected_syringe'] == None:
 		nonpersistent['processing_enabled'] = False
 		messagebox.showwarning(
-			message = 'Calibration has not been completed yet for this run.',
+			message = 'Syringe position is unknown',
+			detail = 'Please click the calibrate button at the top of the UI.',
+		)
+		return
+	if state['actuator_position_mm'] == None:
+		nonpersistent['processing_enabled'] = False
+		messagebox.showwarning(
+			message = 'Actuator position is unknown',
 			detail = 'Please click the calibrate button at the top of the UI.',
 		)
 		return
@@ -51,14 +60,14 @@ def process_commands(state: GlobalState):
 			):
 				raw_steps_required = (
 					specifics['target_syringe']
-					- nonpersistent['selected_syringe']
+					- state['selected_syringe']
 				) * nonpersistent['rotator_steps_equivalent_to_90_degrees']
 				
 				specifics['direction'] = direction(raw_steps_required)
 				specifics['half_steps_remaining'] = 2 * abs(raw_steps_required)
 			
 			if specifics['half_steps_remaining'] == 0:
-				nonpersistent['selected_syringe'] = (
+				state['selected_syringe'] = (
 					specifics['target_syringe']
 				)
 				finish_active_task(state)
@@ -71,20 +80,28 @@ def process_commands(state: GlobalState):
 			specifics['half_steps_remaining'] -= 1
 		
 		case 'Actuate':
-			if not 'milliseconds_remaining' in specifics:
-				specifics['milliseconds_remaining'] = (
-					2 * specifics['milliseconds_needed_total']
+			if not 'travel_mm_remaining' in specifics:
+				specifics['travel_mm_remaining'] = (
+					specifics['travel_mm_needed_total']
 				)
 			
-			if specifics['milliseconds_remaining'] == 0:
+			target_pin_name = (
+				'actuator_extend'
+				if specifics['direction'] == 1
+				else 'actuator_retract'
+			)
+			
+			if specifics['travel_mm_remaining'] <= 0:
+				write_pin(state, 'actuator_retract', 0)
+				write_pin(state, 'actuator_extend', 0)
 				finish_active_task(state)
 				return
 			
-			write_pin(state, 'actuator_direction', specifics['direction'])
-			write_pin(state, 'actuator_step', flip_bit(
-				read_pin(state, 'actuator_step')
-			))
-			specifics['milliseconds_remaining'] -= 1
+			write_pin(state, target_pin_name, specifics['direction'])
+			specifics['travel_mm_remaining'] -= (
+				nonpersistent['processing_loop_measured_delta'] * \
+				nonpersistent['actuator_travel_mm_per_ms']
+			)
 
 def finish_active_task(state: GlobalState):
 	state['command_queue'][0]['finished_at'] = unix_time_ms()

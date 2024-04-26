@@ -2,7 +2,7 @@ from copy import copy
 import json
 from os import environ
 from pathlib import Path
-from tkinter import Tk
+from tkinter import Tk, Toplevel
 from typing import Any, Callable, Dict, List, Literal, Mapping, NotRequired, TypedDict, cast, get_args, TYPE_CHECKING
 from util import unix_time_ms
 from pins import Bit, PinMappings
@@ -17,8 +17,8 @@ class CommandRotate(TypedDict):
 class CommandActuate(TypedDict):
 	verb: Literal['Actuate']
 	direction: Bit
-	milliseconds_needed_total: int
-	milliseconds_remaining: NotRequired[int]
+	travel_mm_needed_total: float
+	travel_mm_remaining: NotRequired[float]
 CommandSpecifics = CommandRotate | CommandActuate
 class Command(TypedDict):
 	ordinal: int
@@ -46,21 +46,27 @@ class NonPersistentState(TypedDict):
 	gui_root: Tk | None
 	gui_redrawables: List[Redrawable]
 	gui_dependency_cache: Dict[str, Any]
+	modal: Toplevel | None
+	modal_redrawables: List[Redrawable]
+	modal_dependency_cache: Dict[str, Any]
 	default_font_sizes: Dict[str, int]
 	reopening_gui: bool
 	shutting_down: bool
-	selected_syringe: SyringeNumber | None
-	actuator_position_mm: float | None
 	processing_enabled: bool
 	processing_loop_last_start: int
 	processing_loop_measured_delta: int
 	processing_loop_interval: int
 	rotator_steps_equivalent_to_90_degrees: int
-	actuator_mm_per_ms: float
+	actuator_travel_mm_per_ms: float
+	actuator_max_possible_extension_mm: float
 class GlobalState(TypedDict):
 	nonpersistent: NonPersistentState
 	ui_scale: float
 	pins: PinMappings
+	selected_syringe: SyringeNumber | None
+	actuator_position_mm: float | None
+	plunger_positions_mm: Dict[SyringeNumber, float]
+	'''Distances from fully retracted actuator tip to each plunger's tip'''
 	command_queue: list[Command]
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
@@ -104,19 +110,21 @@ def get_initial_global_state() -> GlobalState:
 			'gui_root': None,
 			'gui_redrawables': [],
 			'gui_dependency_cache': {},
+			'modal': None,
+			'modal_redrawables': [],
+			'modal_dependency_cache': {},
 			'default_font_sizes': {},
 			'reopening_gui': False,
 			'shutting_down': False,
-			'selected_syringe': None,
-			'actuator_position_mm': None,
 			'processing_enabled': False,
 			'processing_loop_interval': 8,
 			'processing_loop_measured_delta': 0,
 			'processing_loop_last_start': 0,
 			'rotator_steps_equivalent_to_90_degrees': 235,
-			'actuator_mm_per_ms': 15e-3,
+			'actuator_travel_mm_per_ms': 15e-3,
+			'actuator_max_possible_extension_mm': 120.0,
 		},
-		'ui_scale': 1,
+		'ui_scale': 1.0,
 		'pins': cast(PinMappings, dict(map(
 			lambda name: (
 				name,
@@ -128,6 +136,9 @@ def get_initial_global_state() -> GlobalState:
 			),
 			PinMappings.__annotations__.keys(),
 		))),
+		'selected_syringe': None,
+		'actuator_position_mm': None,
+		'plunger_positions_mm': {},
 		'command_queue': [],
 		'command_history': [],
 		'next_command_ordinal': 0,
