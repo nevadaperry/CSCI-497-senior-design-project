@@ -1,7 +1,7 @@
 from threading import Timer
 from pins import InputOutput, PinMappings, PinNumber, setup_pins
-from gui_calibration import build_calibration_gui, calibration_is_complete
-from state import CommandSpecifics, GlobalState, SyringeNumber, enqueue_command, save_state_to_disk, Redrawable
+from gui_calibration import ACTUATOR_HANDWHEEL_OPTIONS, build_calibration_gui, toggle_processing_with_warning
+from state import CommandSpecifics, GlobalState, SyringeNumber, enqueue_command, processing_is_allowed_to_be_started, save_state_to_disk, Redrawable, calibration_is_complete
 from tkinter import StringVar, messagebox
 import tkinter
 import tkinter as ttk
@@ -131,7 +131,20 @@ def build_ui_scale_control(
 	)
 	option_menu.pack()
 
-	return []
+	return [
+		{
+			'dependencies': [
+				lambda: state['nonpersistent']['modal'] == None
+			],
+			'redraw': lambda: (
+				option_menu.config(
+					state = 'disabled'
+					if state['nonpersistent']['modal'] != None
+					else 'normal'
+				),
+			)
+		},
+	]
 
 def build_rotator_controls(
 	state: GlobalState,
@@ -246,7 +259,7 @@ def build_actuator_controls(
 		)
 	})
 	
-	for i, distance in enumerate([1, 5, 20]):
+	for i, distance in enumerate(ACTUATOR_HANDWHEEL_OPTIONS):
 		row = ttk.Frame(frame)
 		row.pack()
 		
@@ -255,10 +268,7 @@ def build_actuator_controls(
 			text = f'Retract actuator {distance} mm',
 			command = lambda distance=distance: enqueue_command(state, {
 				'verb': 'Actuate',
-				'direction': 0,
-				'travel_mm_needed_total': round(
-					distance / nonpersistent['actuator_travel_mm_per_ms'],
-				),
+				'relative_mm_required': -distance,
 			}),
 		)
 		retract_button.grid(row = i, column = 0)
@@ -280,10 +290,7 @@ def build_actuator_controls(
 			text = f'Extend actuator {distance} mm',
 			command = lambda distance=distance: enqueue_command(state, {
 				'verb': 'Actuate',
-				'direction': 1,
-				'travel_mm_needed_total': round(
-					distance / nonpersistent['actuator_travel_mm_per_ms'],
-				),
+				'relative_mm_required': distance,
 			}),
 		)
 		extend_button.grid(row = i, column = 1)
@@ -456,19 +463,16 @@ def build_processing_controls(
 		padx = scaled_constants['control_frames_pad_x'],
 		pady = scaled_constants['control_frames_pad_y'],
 	)
+	# Workaround to support button colors on Mac
 	try:
 		tkmacosx = __import__('tkmacosx')
 	except:
 		tkmacosx = tkinter
-	switch = tkmacosx.Button(
+	processing_switch = tkmacosx.Button(
 		controls,
-		command = lambda: set_value(
-			state['nonpersistent'],
-			'processing_enabled',
-			not state['nonpersistent']['processing_enabled'],
-		),
+		command = lambda: toggle_processing_with_warning(state),
 	)
-	switch.pack()
+	processing_switch.pack()
 	stats_table = ttk.Frame(controls)
 	stats_table.pack()
 	ttk.Label(
@@ -513,12 +517,9 @@ def build_processing_controls(
 				lambda: state['nonpersistent']['processing_enabled'],
 			],
 			'redraw': lambda: (
-				switch.config(
+				processing_switch.config(
 					state = 'disabled'
-					if (
-						not calibration_is_complete(state)
-						or state['nonpersistent']['modal'] != None
-					)
+					if not processing_is_allowed_to_be_started(state)
 					else 'normal',
 					
 					text = '(Calibration required)'
@@ -529,13 +530,10 @@ def build_processing_controls(
 						else '\nStart processing\n',
 					
 					background = '#555'
-					if (
-						not calibration_is_complete(state)
-						or state['nonpersistent']['modal'] != None
-					)
+					if not processing_is_allowed_to_be_started(state)
 					else
 						'#933'
-						if state['nonpersistent']['processing_enabled']
+						if state['nonpersistent']['processing_enabled'] == True
 						else '#393',
 					
 					foreground = 'white',
@@ -544,11 +542,11 @@ def build_processing_controls(
 		},
 		{
 			'dependencies': [
-				lambda: state['nonpersistent']['processing_loop_interval']
+				lambda: state['nonpersistent']['processing_loop_interval_ms']
 			],
 			'redraw': lambda: (
 				interval_setting.config(text = f'''{
-					str(state['nonpersistent']['processing_loop_interval'])
+					str(state['nonpersistent']['processing_loop_interval_ms'])
 				} ms''')
 			)
 		},

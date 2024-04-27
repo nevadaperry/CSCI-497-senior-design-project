@@ -14,13 +14,12 @@ SyringeNumber = Literal[1, 2, 3, 4]
 class CommandRotate(TypedDict):
 	verb: Literal['Rotate']
 	target_syringe: SyringeNumber
-	direction: NotRequired[Bit]
-	half_steps_remaining: NotRequired[int]
+	relative_degrees_required: NotRequired[float]
+	relative_degrees_traveled: NotRequired[float]
 class CommandActuate(TypedDict):
 	verb: Literal['Actuate']
-	direction: Bit
-	travel_mm_needed_total: float
-	travel_mm_remaining: NotRequired[float]
+	relative_mm_required: float
+	relative_mm_traveled: NotRequired[float]
 CommandSpecifics = CommandRotate | CommandActuate
 class Command(TypedDict):
 	ordinal: int
@@ -58,11 +57,29 @@ class NonPersistentState(TypedDict):
 	processing_enabled: bool
 	processing_loop_last_start: int
 	processing_loop_measured_delta: int
-	processing_loop_interval: int
-	rotator_steps_equivalent_to_90_degrees: int
+	processing_loop_interval_ms: int
+	safety_margin: float
+	'''
+	General-purpose safety margin for any operation that would physically crash
+	the hardware, or fail to clear an obstacle. This is especially important
+	because we (Team 22) are using a servo actuator and driver that extends
+	/retracts continuously while given a high signal. Bioprintly itself is not a
+	Raspberry Pi OS driver, so there is no guarantee that a high signal will be
+	turned off at the intended point in time.
+	
+	An improved iteration of this project might (1) use a stepper actuator
+	rather than a servo one, to eliminate concerns over signal timing, or (2)
+	delegate control of the servo actuator to an Arduino/microcontroller set up
+	to accept commands with specific timing params.
+	'''
+	rotator_degrees_per_step: float
 	actuator_travel_mm_per_ms: float
 	actuator_max_possible_extension_mm: float
-	actuator_is_homing: bool
+	actuator_has_calibration_lock: bool
+	'''
+	Actuator may be locked during certain calibration steps so that only one
+	calibration related action may be taken at a time.
+	'''
 class ProcessInfo(TypedDict):
 	pid: int
 	ppid: int
@@ -156,13 +173,14 @@ def get_initial_global_state() -> GlobalState:
 			'reopening_gui': False,
 			'shutting_down': False,
 			'processing_enabled': False,
-			'processing_loop_interval': 8,
+			'processing_loop_interval_ms': 8,
 			'processing_loop_measured_delta': 0,
 			'processing_loop_last_start': 0,
-			'rotator_steps_equivalent_to_90_degrees': 235,
+			'safety_margin': 0.05,
+			'rotator_degrees_per_step': 90 / 235,
 			'actuator_travel_mm_per_ms': 15e-3,
-			'actuator_max_possible_extension_mm': 120.0,
-			'actuator_is_homing': False,
+			'actuator_max_possible_extension_mm': 113.3,
+			'actuator_has_calibration_lock': False,
 		},
 		'process_info': { 'pid': os.getpid(), 'ppid': os.getppid() },
 		'ui_scale': 1.0,
@@ -190,6 +208,22 @@ def get_initial_global_state() -> GlobalState:
 	save_state_to_disk(state)
 	
 	return state
+
+def calibration_is_complete(state: GlobalState) -> bool:
+	return (
+		state['selected_syringe'] != None
+		and state['actuator_position_mm'] != None
+		and all(
+			str(syringe_number) in state['plunger_positions_mm']
+			for syringe_number in get_args(SyringeNumber)
+		)
+	)
+
+def processing_is_allowed_to_be_started(state: GlobalState) -> bool:
+	return (
+		calibration_is_complete(state)
+		and state['nonpersistent']['modal'] == None
+	)
 
 def enqueue_command(state: GlobalState, specifics: CommandSpecifics):
 	state['command_queue'].append({

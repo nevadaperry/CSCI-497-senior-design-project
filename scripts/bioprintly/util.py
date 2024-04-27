@@ -65,6 +65,29 @@ def maximize_tk_window(root: Tk | Toplevel):
 
 def stringify_primitive(value: Any) -> str:
 	if type(value) is float:
-		return str(round(value, 1))
+		# 2 digits after the dot
+		return str(round(value, 2))
 	else:
 		return str(value)
+
+def this_action_would_put_it_further_away_from_target_than_it_is_now(
+	current_position: int | float,
+	change: int | float,
+	target_position: int | float,
+) -> bool:
+	'''Useful for processing to decide when to stop driving a motor.'''
+	resulting_position = current_position + change
+	
+	return abs(
+		resulting_position - target_position
+	) > abs(
+		current_position - target_position
+	)
+
+def signum(n: int | float):
+	return (
+		0 if n == 0
+		else
+			1 if n > 0
+			else -1
+	)

@@ -1,9 +1,9 @@
 from tkinter import messagebox
-from typing import cast
-from pins import direction, flip_bit, read_pin, write_pin, zero_out_pins
-from state import FinishedCommand, GlobalState, save_state_to_disk
+from typing import Any, Callable, Dict, cast
+from pins import flip_bit, read_pin, write_pin, zero_out_pins
+from state import CommandActuate, CommandRotate, CommandSpecifics, FinishedCommand, GlobalState, NonPersistentState, SyringeNumber, save_state_to_disk, calibration_is_complete
 from time import sleep
-from util import unix_time_ms
+from util import signum, this_action_would_put_it_further_away_from_target_than_it_is_now, unix_time_ms
 
 def run_service(state: GlobalState):
 	nonpersistent = state['nonpersistent']
@@ -22,7 +22,7 @@ def run_service(state: GlobalState):
 			save_state_to_disk(state)
 		
 		sleep(max(0,
-			nonpersistent['processing_loop_interval']
+			nonpersistent['processing_loop_interval_ms']
 			- (unix_time_ms() - nonpersistent['processing_loop_last_start'])
 		) / 1e3)
 	
@@ -30,19 +30,10 @@ def run_service(state: GlobalState):
 	save_state_to_disk(state)
 
 def process_commands(state: GlobalState):
-	nonpersistent = state['nonpersistent']
-	
-	if state['selected_syringe'] == None:
-		nonpersistent['processing_enabled'] = False
+	if not calibration_is_complete(state):
+		state['nonpersistent']['processing_enabled'] = False
 		messagebox.showwarning(
-			message = 'Syringe position is unknown',
-			detail = 'Please click the calibrate button at the top of the UI.',
-		)
-		return
-	if state['actuator_position_mm'] == None:
-		nonpersistent['processing_enabled'] = False
-		messagebox.showwarning(
-			message = 'Actuator position is unknown',
+			message = 'Calibration is missing one or more values',
 			detail = 'Please click the calibrate button at the top of the UI.',
 		)
 		return
@@ -55,56 +46,21 @@ def process_commands(state: GlobalState):
 		active_command['started_at'] = unix_time_ms()
 	
 	specifics = active_command['specifics']
-	match specifics['verb']:
-		case 'Rotate':
-			if (
-				not 'direction' in specifics or
-				not 'half_steps_remaining' in specifics
-			):
-				raw_steps_required = (
-					specifics['target_syringe']
-					- state['selected_syringe']
-				) * nonpersistent['rotator_steps_equivalent_to_90_degrees']
-				
-				specifics['direction'] = direction(raw_steps_required)
-				specifics['half_steps_remaining'] = 2 * abs(raw_steps_required)
-			
-			if specifics['half_steps_remaining'] == 0:
-				state['selected_syringe'] = (
-					specifics['target_syringe']
-				)
-				finish_active_task(state)
-				return
-			
-			write_pin(state, 'rotator_direction', specifics['direction'])
-			write_pin(state, 'rotator_step', flip_bit(
-				read_pin(state, 'rotator_step')
-			))
-			specifics['half_steps_remaining'] -= 1
-		
-		case 'Actuate':
-			if not 'travel_mm_remaining' in specifics:
-				specifics['travel_mm_remaining'] = (
-					specifics['travel_mm_needed_total']
-				)
-			
-			target_pin_name = (
-				'actuator_extend'
-				if specifics['direction'] == 1
-				else 'actuator_retract'
-			)
-			
-			if specifics['travel_mm_remaining'] <= 0:
-				write_pin(state, 'actuator_retract', 0)
-				write_pin(state, 'actuator_extend', 0)
-				finish_active_task(state)
-				return
-			
-			write_pin(state, target_pin_name, specifics['direction'])
-			specifics['travel_mm_remaining'] -= (
-				nonpersistent['processing_loop_measured_delta'] * \
-				nonpersistent['actuator_travel_mm_per_ms']
-			)
+	processing_functions: Dict[
+		str,
+		Callable[[GlobalState, NonPersistentState, Any], None]
+	] = {
+		'Rotate': rotate_one_step,
+		'Actuate': actuate_one_step,
+	}
+	if not specifics['verb'] in processing_functions:
+		raise Exception(f"Tried to process unknown command {specifics['verb']}")
+	
+	processing_functions[specifics['verb']](
+		state,
+		state['nonpersistent'],
+		specifics
+	)
 
 def finish_active_task(state: GlobalState):
 	state['command_queue'][0]['finished_at'] = unix_time_ms()
@@ -113,3 +69,83 @@ def finish_active_task(state: GlobalState):
 	)
 	state['command_queue'] = state['command_queue'][1:]
 	save_state_to_disk(state)
+
+def rotate_one_step(
+	state: GlobalState,
+	nonpersistent: NonPersistentState,
+	specifics: CommandRotate,
+):
+	if not 'relative_degrees_required' in specifics:
+		specifics['relative_degrees_required'] = (
+			specifics['target_syringe']
+			- cast(SyringeNumber, state['selected_syringe'])
+		) * 90
+	
+	if not 'relative_degrees_traveled' in specifics:
+		specifics['relative_degrees_traveled'] = 0
+	
+	if this_action_would_put_it_further_away_from_target_than_it_is_now(
+		specifics['relative_degrees_traveled'],
+		nonpersistent['rotator_degrees_per_step'],
+		specifics['relative_degrees_required'],
+	):
+		state['selected_syringe'] = specifics['target_syringe']
+		finish_active_task(state)
+		return
+	
+	write_pin(state, 'rotator_direction', (
+		1
+		if specifics['relative_degrees_required'] >= 0
+		else 0
+	))
+	write_pin(state, 'rotator_step', flip_bit(
+		read_pin(state, 'rotator_step')
+	))
+	specifics['relative_degrees_traveled'] += (
+		nonpersistent['rotator_degrees_per_step']
+	)
+
+def actuate_one_step(
+	state: GlobalState,
+	nonpersistent: NonPersistentState,
+	specifics: CommandActuate
+):
+	if not 'relative_mm_traveled' in specifics:
+		specifics['relative_mm_traveled'] = 0
+	
+	expected_travel_per_step = (
+		signum(specifics['relative_mm_required'])
+		* nonpersistent['actuator_travel_mm_per_ms']
+		* nonpersistent['processing_loop_measured_delta']
+	)
+	
+	if this_action_would_put_it_further_away_from_target_than_it_is_now(
+		specifics['relative_mm_traveled'],
+		expected_travel_per_step,
+		specifics['relative_mm_required'],
+	):
+		write_pin(state, 'actuator_retract', 0)
+		write_pin(state, 'actuator_extend', 0)
+		finish_active_task(state)
+		return
+	
+	if (
+		cast(float, state['actuator_position_mm'])
+		+ expected_travel_per_step
+	) > (
+		nonpersistent['actuator_max_possible_extension_mm']
+		* (1 - nonpersistent['safety_margin'])
+	):
+		nonpersistent['processing_enabled'] = False
+		messagebox.showerror(
+			message = 'Actuator has reached the maximum safe distance programmed. You may have run out of material in the current syringe.',
+			detail = 'To continue, open the calibration window, home the actuator, and re-calibrate the current syringe to a position where it has more material.',
+		)
+		return
+	
+	if expected_travel_per_step > 0:
+		write_pin(state, 'actuator_extend', 1)
+	else:
+		write_pin(state, 'actuator_retract', 1)
+	
+	specifics['relative_mm_traveled'] += expected_travel_per_step

@@ -47,12 +47,6 @@ except:
 def flip_bit(value: Bit) -> Bit:
 	return cast(Bit, +(not value))
 
-def direction(value: int) -> Bit:
-	if value > 0:
-		return 1
-	else:
-		return 0
-
 def setup_pins(state: GlobalState):
 	'''Can be rerun idempotently'''
 	GPIO.setmode(GPIO.BOARD)
@@ -106,19 +100,3 @@ def zero_out_pins(state: GlobalState):
 	
 	for pin_name, pin in state['pins'].items():
 		cast(Pin, pin)['value'] = 0
-
-def home_the_actuator(state: GlobalState):
-	'''Only for use in internal logic; not a substitute for CommandActuate'''
-	nonpersistent = state['nonpersistent']
-	if nonpersistent['actuator_is_homing'] == True:
-		return
-	nonpersistent['actuator_is_homing'] = True
-	write_pin(state, 'actuator_retract', 1)
-	sleep(
-		nonpersistent['actuator_max_possible_extension_mm']
-		/ nonpersistent['actuator_travel_mm_per_ms']
-		/ 1000
-	)
-	write_pin(state, 'actuator_retract', 0)
-	state['actuator_position_mm'] = 0
-	nonpersistent['actuator_is_homing'] = False
