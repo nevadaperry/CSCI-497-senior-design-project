@@ -1,6 +1,6 @@
 from threading import Timer
 from pins import InputOutput, PinMappings, PinNumber, setup_pins
-from gui_calibration import ACTUATOR_HANDWHEEL_OPTIONS, build_calibration_gui, toggle_processing_with_warning
+from gui_calibration import ACTUATOR_HANDCRANK_OPTIONS_MM, build_calibration_gui, toggle_processing_with_warning
 from state import CommandSpecifics, GlobalState, SyringeNumber, enqueue_command, processing_is_allowed_to_be_started, save_state_to_disk, Redrawable, calibration_is_complete
 from tkinter import StringVar, messagebox
 import tkinter
@@ -163,40 +163,46 @@ def build_rotator_controls(
 		pady = scaled_constants['control_frames_pad_y'],
 	)
 	
-	selected_syringe_row = ttk.Frame(frame)
-	selected_syringe_row.pack()
+	current_syringe_row = ttk.Frame(frame)
+	current_syringe_row.pack()
 	ttk.Label(
-		selected_syringe_row,
-		text = 'Selected syringe:',
+		current_syringe_row,
+		text = 'Current syringe:',
 	).pack(side = 'left')
-	selected_syringe_label = ttk.Label(
-		selected_syringe_row,
+	current_syringe_label = ttk.Label(
+		current_syringe_row,
 		font = 'TkFixedFont',
 	)
-	selected_syringe_label.pack(side = 'left')
+	current_syringe_label.pack(side = 'left')
 	redrawables.append({
 		'dependencies': [
-			lambda: state['selected_syringe']
+			lambda: state['current_syringe']
 		],
 		'redraw': lambda: (
-			selected_syringe_label.config(text = (
-				state['selected_syringe']
-				if state['selected_syringe'] != None
+			current_syringe_label.config(text = (
+				state['current_syringe']
+				if state['current_syringe'] != None
 				else '⚠️ Unknown; awaiting calibration'
 			)),
 		)
 	})
 	
+	switch_to_syringe_row = ttk.Frame(frame)
+	switch_to_syringe_row.pack()
+	ttk.Label(
+		switch_to_syringe_row,
+		text = 'Switch to syringe:',
+	).pack(side = 'left')
 	for i in get_args(SyringeNumber):
 		switch_to_syringe_button = ttk.Button(
-			frame,
-			text = f'Switch to syringe {i}',
+			switch_to_syringe_row,
+			text = f'#{i}',
 			command = lambda i=i: enqueue_command(state, {
 				'verb': 'Rotate',
 				'target_syringe': i,
 			}),
 		)
-		switch_to_syringe_button.pack()
+		switch_to_syringe_button.pack(side = 'left')
 		redrawables.append({
 			'dependencies': [
 				lambda: state['nonpersistent']['processing_enabled']
@@ -251,7 +257,7 @@ def build_actuator_controls(
 		'redraw': lambda: (
 			actuator_position_label.config(text = (
 				f'''{
-					state['actuator_position_mm']
+					stringify_primitive(state['actuator_position_mm'])
 				} mm extended'''
 				if state['actuator_position_mm'] != None
 				else '(Unknown; awaiting calibration)'
@@ -259,7 +265,7 @@ def build_actuator_controls(
 		)
 	})
 	
-	for i, distance in enumerate(ACTUATOR_HANDWHEEL_OPTIONS):
+	for i, distance in enumerate(ACTUATOR_HANDCRANK_OPTIONS_MM):
 		row = ttk.Frame(frame)
 		row.pack()
 		
@@ -492,7 +498,7 @@ def build_processing_controls(
 		{
 			'dependencies': [
 				lambda: state['nonpersistent']['processing_enabled'],
-				lambda: state['selected_syringe'],
+				lambda: state['current_syringe'],
 				lambda: state['actuator_position_mm'],
 			],
 			'redraw': lambda: (
@@ -503,7 +509,7 @@ def build_processing_controls(
 					
 					text = '✒ Calibrate the barrel and syringes'
 					if (
-						state['selected_syringe'] == None
+						state['current_syringe'] == None
 						or state['actuator_position_mm'] == None
 					)
 					else '(Re)-calibrate the barrel and syringes',

@@ -11,6 +11,7 @@ PinNumber = Literal[
 	 3,  5,  7,     11, 13, 15,     19, 21, 23,         29, 31, 33, 35, 37,
 ]
 InputOutput = Literal['Input', 'Output']
+
 class Pin(TypedDict):
 	number: PinNumber | None
 	io_type: InputOutput | None
@@ -18,12 +19,12 @@ class Pin(TypedDict):
 class PinMappings(TypedDict):
 	rotator_direction: Pin
 	rotator_step: Pin
-	heater_1: Pin
-	heater_2: Pin
-	heater_3: Pin
-	heater_4: Pin
 	actuator_retract: Pin
 	actuator_extend: Pin
+	heating_pad_1: Pin
+	heating_pad_2: Pin
+	heating_pad_3: Pin
+	heating_pad_4: Pin
 	uv_light_1: Pin
 	uv_light_2: Pin
 	uv_light_3: Pin

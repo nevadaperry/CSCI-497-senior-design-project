@@ -50,8 +50,8 @@ def process_commands(state: GlobalState):
 		str,
 		Callable[[GlobalState, NonPersistentState, Any], None]
 	] = {
-		'Rotate': rotate_one_step,
-		'Actuate': actuate_one_step,
+		'Rotate': rotate_one_interval,
+		'Actuate': actuate_one_interval,
 	}
 	if not specifics['verb'] in processing_functions:
 		raise Exception(f"Tried to process unknown command {specifics['verb']}")
@@ -70,7 +70,7 @@ def finish_active_task(state: GlobalState):
 	state['command_queue'] = state['command_queue'][1:]
 	save_state_to_disk(state)
 
-def rotate_one_step(
+def rotate_one_interval(
 	state: GlobalState,
 	nonpersistent: NonPersistentState,
 	specifics: CommandRotate,
@@ -78,18 +78,24 @@ def rotate_one_step(
 	if not 'relative_degrees_required' in specifics:
 		specifics['relative_degrees_required'] = (
 			specifics['target_syringe']
-			- cast(SyringeNumber, state['selected_syringe'])
-		) * 90
+			- cast(SyringeNumber, state['current_syringe'])
+		) * 90.0
 	
 	if not 'relative_degrees_traveled' in specifics:
-		specifics['relative_degrees_traveled'] = 0
+		specifics['relative_degrees_traveled'] = 0.0
+	
+	expected_travel_degrees = (
+		signum(specifics['relative_degrees_required'])
+		# Stepper motor steps only count the rising edge
+		* 0.5 * nonpersistent['rotator_degrees_per_step']
+	)
 	
 	if this_action_would_put_it_further_away_from_target_than_it_is_now(
 		specifics['relative_degrees_traveled'],
-		nonpersistent['rotator_degrees_per_step'],
+		expected_travel_degrees,
 		specifics['relative_degrees_required'],
 	):
-		state['selected_syringe'] = specifics['target_syringe']
+		state['current_syringe'] = specifics['target_syringe']
 		finish_active_task(state)
 		return
 	
@@ -101,19 +107,23 @@ def rotate_one_step(
 	write_pin(state, 'rotator_step', flip_bit(
 		read_pin(state, 'rotator_step')
 	))
-	specifics['relative_degrees_traveled'] += (
-		nonpersistent['rotator_degrees_per_step']
-	)
+	
+	specifics['relative_degrees_traveled'] += expected_travel_degrees
 
-def actuate_one_step(
+def actuate_one_interval(
 	state: GlobalState,
 	nonpersistent: NonPersistentState,
 	specifics: CommandActuate
 ):
 	if not 'relative_mm_traveled' in specifics:
 		specifics['relative_mm_traveled'] = 0
+	if specifics['relative_mm_required'] == 'Go home':
+		specifics['relative_mm_required'] = -(
+			cast(float, state['actuator_position_mm'])
+			* (1 + nonpersistent['safety_margin'])
+		)
 	
-	expected_travel_per_step = (
+	expected_travel_mm = (
 		signum(specifics['relative_mm_required'])
 		* nonpersistent['actuator_travel_mm_per_ms']
 		* nonpersistent['processing_loop_measured_delta']
@@ -121,7 +131,7 @@ def actuate_one_step(
 	
 	if this_action_would_put_it_further_away_from_target_than_it_is_now(
 		specifics['relative_mm_traveled'],
-		expected_travel_per_step,
+		expected_travel_mm,
 		specifics['relative_mm_required'],
 	):
 		write_pin(state, 'actuator_retract', 0)
@@ -131,7 +141,7 @@ def actuate_one_step(
 	
 	if (
 		cast(float, state['actuator_position_mm'])
-		+ expected_travel_per_step
+		+ expected_travel_mm
 	) > (
 		nonpersistent['actuator_max_possible_extension_mm']
 		* (1 - nonpersistent['safety_margin'])
@@ -143,9 +153,13 @@ def actuate_one_step(
 		)
 		return
 	
-	if expected_travel_per_step > 0:
+	if expected_travel_mm > 0:
 		write_pin(state, 'actuator_extend', 1)
 	else:
 		write_pin(state, 'actuator_retract', 1)
 	
-	specifics['relative_mm_traveled'] += expected_travel_per_step
+	specifics['relative_mm_traveled'] += expected_travel_mm
+	state['actuator_position_mm'] = (
+		cast(float, state['actuator_position_mm'])
+		+ expected_travel_mm
+	)

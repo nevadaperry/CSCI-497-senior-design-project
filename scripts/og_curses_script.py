@@ -42,7 +42,6 @@ def setup_pins():
 	for pin in output_pins:
 		if not pin in valid_io_pins:
 			raise Exception("Invalid I/O pin {pin}")
-		#print('hello' + str(pin))
 		GPIO.setup(pin, GPIO.OUT)
 		output_values[pin] = 0
 	for pin in valid_io_pins:

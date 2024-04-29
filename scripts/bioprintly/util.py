@@ -66,7 +66,7 @@ def maximize_tk_window(root: Tk | Toplevel):
 def stringify_primitive(value: Any) -> str:
 	if type(value) is float:
 		# 2 digits after the dot
-		return str(round(value, 2))
+		return f'{value:.2f}'
 	else:
 		return str(value)
 

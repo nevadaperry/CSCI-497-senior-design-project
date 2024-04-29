@@ -8,8 +8,6 @@ from util import set_value
 
 def setup_everything():
 	state = get_initial_global_state()
-	gui_root = state['nonpersistent']['gui_root']
-	
 	setup_pins(state)
 	
 	# Launch the service (command processing) as a secondary thread
@@ -17,7 +15,11 @@ def setup_everything():
 	
 	signal.signal(signal.SIGINT, lambda a, b: (
 		set_value(state['nonpersistent'], 'shutting_down', True),
-		gui_root.quit() if gui_root != None else None,
+		(
+			state['nonpersistent']['gui_root'].quit()
+			if state['nonpersistent']['gui_root'] != None
+			else None,
+		)
 	))
 	
 	# Run the GUI as the main thread

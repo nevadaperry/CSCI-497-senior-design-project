@@ -5,11 +5,12 @@ import os
 from pathlib import Path
 import subprocess
 from tkinter import Tk, Toplevel, messagebox
-from typing import Any, Callable, Dict, List, Literal, Mapping, NotRequired, Tuple, TypedDict, cast, get_args, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Literal, NotRequired, TypedDict, cast, get_args
 from util import unix_time_ms
-from pins import Bit, PinMappings
+from pins import PinMappings
 
 SyringeNumber = Literal[1, 2, 3, 4]
+OnOff = Literal['On', 'Off']
 
 class CommandRotate(TypedDict):
 	verb: Literal['Rotate']
@@ -18,9 +19,24 @@ class CommandRotate(TypedDict):
 	relative_degrees_traveled: NotRequired[float]
 class CommandActuate(TypedDict):
 	verb: Literal['Actuate']
-	relative_mm_required: float
+	relative_mm_required: float | Literal["Go home"]
 	relative_mm_traveled: NotRequired[float]
-CommandSpecifics = CommandRotate | CommandActuate
+class CommandTurnHeatingPad(TypedDict):
+	verb: Literal['Turn heating pad']
+	target_heating_pad: SyringeNumber | Literal['Current one']
+	on_or_off: OnOff
+class CommandTurnUvLight(TypedDict):
+	verb: Literal['Turn UV light']
+	target_uv_light: SyringeNumber | Literal['Current one']
+	on_or_off: OnOff
+
+CommandSpecifics = (
+	CommandRotate
+	| CommandActuate
+	| CommandTurnHeatingPad
+	| CommandTurnUvLight
+)
+
 class Command(TypedDict):
 	ordinal: int
 	enqueued_at: int
@@ -65,7 +81,7 @@ class NonPersistentState(TypedDict):
 	because we (Team 22) are using a servo actuator and driver that extends
 	/retracts continuously while given a high signal. Bioprintly itself is not a
 	Raspberry Pi OS driver, so there is no guarantee that a high signal will be
-	turned off at the intended point in time.
+	turned off at an intended point in time.
 	
 	An improved iteration of this project might (1) use a stepper actuator
 	rather than a servo one, to eliminate concerns over signal timing, or (2)
@@ -88,7 +104,7 @@ class GlobalState(TypedDict):
 	process_info: ProcessInfo
 	ui_scale: float
 	pins: PinMappings
-	selected_syringe: SyringeNumber | None
+	current_syringe: SyringeNumber | None
 	actuator_position_mm: float | None
 	plunger_positions_mm: Dict[str, float]
 	'''Distances from fully retracted actuator tip to each plunger's tip'''
@@ -174,8 +190,8 @@ def get_initial_global_state() -> GlobalState:
 			'shutting_down': False,
 			'processing_enabled': False,
 			'processing_loop_interval_ms': 8,
-			'processing_loop_measured_delta': 0,
-			'processing_loop_last_start': 0,
+			'processing_loop_measured_delta': 8,
+			'processing_loop_last_start': unix_time_ms(),
 			'safety_margin': 0.05,
 			'rotator_degrees_per_step': 90 / 235,
 			'actuator_travel_mm_per_ms': 15e-3,
@@ -195,7 +211,7 @@ def get_initial_global_state() -> GlobalState:
 			),
 			PinMappings.__annotations__.keys(),
 		))),
-		'selected_syringe': None,
+		'current_syringe': None,
 		'actuator_position_mm': None,
 		'plunger_positions_mm': {},
 		'command_queue': [],
@@ -211,12 +227,13 @@ def get_initial_global_state() -> GlobalState:
 
 def calibration_is_complete(state: GlobalState) -> bool:
 	return (
-		state['selected_syringe'] != None
+		state['current_syringe'] != None
 		and state['actuator_position_mm'] != None
 		and all(
 			str(syringe_number) in state['plunger_positions_mm']
 			for syringe_number in get_args(SyringeNumber)
 		)
+		and state['nonpersistent']['actuator_has_calibration_lock'] == False
 	)
 
 def processing_is_allowed_to_be_started(state: GlobalState) -> bool:
