@@ -140,7 +140,6 @@ def save_state_to_disk(state: GlobalState):
 		indent = '\t'
 	)
 	state['nonpersistent']['savefile_last_write'] = unix_time_ms()
-	print(f'Saved state to {savefile_path}')
 
 def load_state_from_disk(state: GlobalState):
 	savefile_path = state['nonpersistent']['savefile_path']
@@ -198,7 +197,7 @@ def get_initial_global_state() -> GlobalState:
 			'processing_loop_last_start': unix_time_ms(),
 			'safety_margin': 0.05,
 			'rotator_degrees_per_step': 90 / 235,
-			'actuator_travel_mm_per_ms': 15e-3,
+			'actuator_travel_mm_per_ms': 12e-3,
 			'actuator_max_possible_extension_mm': 113.3,
 			'actuator_has_calibration_lock': False,
 		},
