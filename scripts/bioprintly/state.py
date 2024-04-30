@@ -112,7 +112,7 @@ class GlobalState(TypedDict):
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
 
-def establish_savefile_path() -> str:
+def establish_savefolder_path() -> str:
 	if environ.get('XDG_DATA_DIR'):
 		savefolder_base = f"{environ.get('XDG_DATA_DIR')}/"
 	elif environ.get('HOME'):
@@ -123,6 +123,10 @@ def establish_savefile_path() -> str:
 		raise Exception(f'User directory not found as any of these env vars: XDG_DATA_DIR, HOME, APPDATA')
 	savefolder_path = f'{savefolder_base}bioprintly'
 	Path(savefolder_path).mkdir(parents = True, exist_ok = True)
+	return savefolder_path
+
+def establish_savefile_path() -> str:
+	savefolder_path = establish_savefolder_path()
 	return f'{savefolder_path}/state.json'
 
 def save_state_to_disk(state: GlobalState):
