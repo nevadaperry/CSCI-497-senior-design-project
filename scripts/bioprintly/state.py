@@ -60,7 +60,7 @@ class Request(TypedDict):
 	'''Unix epoch milliseconds'''
 	commands: List[CommandSpecifics]
 class Response(TypedDict):
-	finished_request_timestamp: int
+	completed_request_timestamp: int
 
 # Basically useEffect
 class Redrawable(TypedDict):
@@ -121,7 +121,7 @@ class GlobalState(TypedDict):
 	command_queue: list[EnqueuedCommand]
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
-	request_watermark: int
+	request_handling_watermark: int
 
 def establish_savefolder_path() -> str:
 	if environ.get('XDG_DATA_DIR'):
@@ -232,7 +232,7 @@ def get_initial_global_state() -> GlobalState:
 		'command_queue': [],
 		'command_history': [],
 		'next_command_ordinal': 0,
-		'request_watermark': 0,
+		'request_handling_watermark': 0,
 	}
 	
 	load_state_from_disk(state)

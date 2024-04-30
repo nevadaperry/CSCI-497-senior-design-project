@@ -1,5 +1,8 @@
-from state import GlobalState, Request, Response
-from util import unix_time_ms()
+import json
+from state import GlobalState, Request, Response, CommandSpecifics, enqueue_command
+from time import sleep
+from typing import List
+from util import unix_time_ms
 
 def sleep_briefly():
 	sleep(0.1)
@@ -24,7 +27,7 @@ def handle_requests_repeatedly(state: GlobalState):
 			}
 			json.dump(
 				response,
-				open(f'{savefolder_path}/response.json'),
+				open(f'{savefolder_path}/response.json', 'w'),
 				indent = '\t',
 			)
 		
@@ -32,7 +35,7 @@ def handle_requests_repeatedly(state: GlobalState):
 
 def await_completion(state, commands: List[CommandSpecifics]):
 	caboose_ordinal = 0
-	for command in request['commands']:
+	for command in commands:
 		caboose_ordinal = enqueue_command(state, 'Klipper', command)
 
 	while state['nonpersistent']['shutting_down'] == False:

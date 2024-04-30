@@ -669,6 +669,7 @@ def build_command_queue(
 		lambda: list(map(
 			lambda command: (f'''
 {scrollable_text_pad_left}[{command['specifics']['verb']}]
+{scrollable_text_pad_left}Enqueued by {command['enqueued_by']}
 {scrollable_text_pad_left}Enqueued at {
 	friendly_timestamp(command['enqueued_at'])
 }{f"""
@@ -723,6 +724,7 @@ def build_command_history(
 		lambda: list(map(
 			lambda command: (f'''
 {scrollable_text_pad_left}[{command['specifics']['verb']}]
+{scrollable_text_pad_left}Enqueued by {command['enqueued_by']}
 {scrollable_text_pad_left}Enqueued at {
 	friendly_timestamp(command['enqueued_at'])
 }
