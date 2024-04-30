@@ -1,7 +1,7 @@
 from threading import Timer
 from time import sleep
 from typing import Dict, List, TypedDict, cast, get_args
-from pins import write_pin
+from pins import write_pin, zero_out_pins
 from util import set_value, signum, stringify_primitive, this_action_would_put_it_further_away_from_target_than_it_is_now, unix_time_ms
 from state import GlobalState, Redrawable, SyringeNumber, calibration_is_complete
 from tkinter import Toplevel, messagebox, ttk
@@ -10,7 +10,7 @@ class ScaledConstants(TypedDict):
 	main_cell_pad_x: float
 	main_cell_pad_y: float
 
-ACTUATOR_HANDCRANK_OPTIONS_MM = [0.5, 10]
+ACTUATOR_HANDCRANK_OPTIONS_MM = [1, 10]
 
 def build_calibration_gui(
 	state: GlobalState,
@@ -465,13 +465,9 @@ def handcrank_the_actuator(state: GlobalState, relative_mm_required: float):
 			nonpersistent['actuator_max_possible_extension_mm']
 			* (1 - nonpersistent['safety_margin'])
 		):
-			messagebox.showwarning(
-				message = 'Actuator has reached the maximum safe distance programmed',
-				detail = f"({nonpersistent['actuator_max_possible_extension_mm']} mm minus a {100 * nonpersistent['safety_margin']}% safety margin)",
-			)
 			break
 		
-		if relative_mm_required > 1:
+		if relative_mm_required > 0:
 			write_pin(state, 'actuator_extend', 1)
 		else:
 			write_pin(state, 'actuator_retract', 1)
@@ -509,6 +505,7 @@ def close_calibration_gui(state: GlobalState):
 def toggle_processing_with_warning(state: GlobalState):
 	if state['nonpersistent']['processing_enabled'] == True:
 		state['nonpersistent']['processing_enabled'] = False
+		zero_out_pins(state)
 	elif messagebox.askokcancel(
 		message = 'Careful!',
 		detail = f"""Are these calibration values correct? If they're wrong, the bioprint hardware will likely crash and damage itself.

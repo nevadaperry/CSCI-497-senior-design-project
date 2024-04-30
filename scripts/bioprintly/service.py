@@ -15,8 +15,6 @@ def run_service(state: GlobalState):
 		
 		if nonpersistent['processing_enabled'] == True:
 			process_commands(state)
-		else:
-			zero_out_pins(state)
 		
 		if unix_time_ms() >= nonpersistent['savefile_last_write'] + 2000:
 			save_state_to_disk(state)
@@ -67,6 +65,7 @@ def finish_active_task(state: GlobalState):
 	state['command_history'].append(
 		cast(FinishedCommand, state['command_queue'][0])
 	)
+	state['command_history'] = state['command_history'][:50]
 	state['command_queue'] = state['command_queue'][1:]
 	save_state_to_disk(state)
 
@@ -79,7 +78,7 @@ def rotate_one_interval(
 		specifics['relative_degrees_required'] = (
 			specifics['target_syringe']
 			- cast(SyringeNumber, state['current_syringe'])
-		) * 90.0
+		) * -90.0
 	
 	if not 'relative_degrees_traveled' in specifics:
 		specifics['relative_degrees_traveled'] = 0.0
@@ -100,9 +99,9 @@ def rotate_one_interval(
 		return
 	
 	write_pin(state, 'rotator_direction', (
-		1
+		0
 		if specifics['relative_degrees_required'] >= 0
-		else 0
+		else 1
 	))
 	write_pin(state, 'rotator_step', flip_bit(
 		read_pin(state, 'rotator_step')
@@ -118,10 +117,10 @@ def actuate_one_interval(
 	if not 'relative_mm_traveled' in specifics:
 		specifics['relative_mm_traveled'] = 0
 	if specifics['relative_mm_required'] == 'Go home':
-		specifics['relative_mm_required'] = -(
+		specifics['relative_mm_required'] = (
 			cast(float, state['actuator_position_mm'])
 			* (1 + nonpersistent['safety_margin'])
-		)
+		) * -1
 	
 	expected_travel_mm = (
 		signum(specifics['relative_mm_required'])

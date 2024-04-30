@@ -160,7 +160,6 @@ def load_state_from_disk(state: GlobalState):
 			continue
 		if key in state:
 			state[key] = value
-	print(f'Loaded state from {savefile_path}')
 
 def dont_run_multiple_instances_at_once(savefile_process_info: ProcessInfo):
 	if type(savefile_process_info['pid']) is not int:

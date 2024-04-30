@@ -736,7 +736,7 @@ def build_clear_history_button(
 ) -> List[Redrawable]:
 	button = ttk.Button(
 		parent,
-		text = 'Clear history',
+		text = 'Clear command history',
 		command = lambda: [
 			state['command_history'].clear()
 			if messagebox.askokcancel(
