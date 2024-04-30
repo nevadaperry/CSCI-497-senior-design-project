@@ -401,9 +401,9 @@ def get_plunger_position_text(
 	return (
 		default
 		if str(syringe_number) not in state['plunger_positions_mm']
-		else f"{stringify_primitive(
+		else f"""{stringify_primitive(
 			state['plunger_positions_mm'][str(syringe_number)]
-		)} mm"
+		)} mm"""
 	).rjust(len(default))
 
 def home_the_actuator(state: GlobalState):
