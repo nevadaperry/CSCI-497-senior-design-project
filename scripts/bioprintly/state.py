@@ -130,7 +130,8 @@ def save_state_to_disk(state: GlobalState):
 	I believe this should only be called from the service thread to avoid race
 	conditions.
 	'''
-	savefile = open(state['nonpersistent']['savefile_path'], 'w')
+	savefile_path = state['nonpersistent']['savefile_path']
+	savefile = open(savefile_path, 'w')
 	persistent_state = cast(Dict, copy(state))
 	persistent_state.pop('nonpersistent')
 	json.dump(
@@ -139,10 +140,12 @@ def save_state_to_disk(state: GlobalState):
 		indent = '\t'
 	)
 	state['nonpersistent']['savefile_last_write'] = unix_time_ms()
+	print(f'Saved state to {savefile_path}')
 
 def load_state_from_disk(state: GlobalState):
+	savefile_path = state['nonpersistent']['savefile_path']
 	try:
-		savefile = open(state['nonpersistent']['savefile_path'], 'r')
+		savefile = open(savefile_path, 'r')
 	except:
 		return
 	savedata = json.load(savefile)
@@ -154,6 +157,7 @@ def load_state_from_disk(state: GlobalState):
 			continue
 		if key in state:
 			state[key] = value
+	print(f'Loaded state from {savefile_path}')
 
 def dont_run_multiple_instances_at_once(savefile_process_info: ProcessInfo):
 	if type(savefile_process_info['pid']) is not int:
