@@ -121,7 +121,7 @@ def establish_savefile_path() -> str:
 		savefolder_base = f"{environ.get('APPDATA')}/"
 	else:
 		raise Exception(f'User directory not found as any of these env vars: XDG_DATA_DIR, HOME, APPDATA')
-	savefolder_path = f'{savefolder_base}bioprintly-gui'
+	savefolder_path = f'{savefolder_base}bioprintly'
 	Path(savefolder_path).mkdir(parents = True, exist_ok = True)
 	return f'{savefolder_path}/state.json'
 

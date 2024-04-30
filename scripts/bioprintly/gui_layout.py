@@ -106,7 +106,7 @@ def build_ui_scale_control(
 	)
 	ui_scale_options = ['50%', '65%', '80%', '100%', '125%', '150%', '200%']
 	option_menu_variable = StringVar(
-		value = f'{round(100 * state['ui_scale'])}%'
+		value = f'{round(100 * state["ui_scale"])}%'
 	)
 	option_menu_variable.trace_add(
 		'write',
