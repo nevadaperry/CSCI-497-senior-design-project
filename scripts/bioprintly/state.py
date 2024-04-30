@@ -161,7 +161,7 @@ def dont_run_multiple_instances_at_once(savefile_process_info: ProcessInfo):
 	
 	try:
 		ppid_for_savefile_pid = int(subprocess.check_output(
-			f'ps -o ppid= {savefile_process_info['pid']}',
+			f'ps -o ppid= {savefile_process_info["pid"]}',
 			shell = True,
 			text = True
 		).strip())
