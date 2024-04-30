@@ -162,3 +162,10 @@ def actuate_one_interval(
 		cast(float, state['actuator_position_mm'])
 		+ expected_travel_mm
 	)
+
+	if cast(float, state['actuator_position_mm']) < 0:
+		state['actuator_position_mm'] = 0
+		write_pin(state, 'actuator_retract', 0)
+		write_pin(state, 'actuator_extend', 0)
+		finish_active_task(state)
+		return

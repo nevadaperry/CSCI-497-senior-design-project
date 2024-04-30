@@ -2,6 +2,6 @@
 Type=Application
 Name=Bioprintly
 Icon=printer
-Exec=sh -c 'python3 ~/printer_data/scripts/bioprintly/main.py'
+Exec=sh -c 'python3 ~/printer_data/scripts/bioprintly/main.py 2>&1 >> ~/.bioprintly/main.log'
 Categories=Network
 Terminal=false

@@ -1,5 +1,6 @@
 from gui import run_gui
 from pins import setup_pins
+from request_handling import handle_requests_repeatedly
 from service import run_service
 import signal
 from state import get_initial_global_state, save_state_to_disk
@@ -12,6 +13,8 @@ def setup_everything():
 	
 	# Launch the service (command processing) as a secondary thread
 	Timer(0, run_service, [state]).start()
+	# Launch the request handling (for Klipper) as a tertiary thread
+	Timer(0, handle_requests_repeatedly, [state]).start()
 	
 	signal.signal(signal.SIGINT, lambda a, b: (
 		set_value(state['nonpersistent'], 'shutting_down', True),

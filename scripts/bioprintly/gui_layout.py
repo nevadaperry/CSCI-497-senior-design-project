@@ -193,14 +193,18 @@ def build_rotator_controls(
 		switch_to_syringe_row,
 		text = 'Switch to syringe:',
 	).pack(side = 'left')
-	for i in get_args(SyringeNumber):
+	for syringe_number in get_args(SyringeNumber):
 		switch_to_syringe_button = ttk.Button(
 			switch_to_syringe_row,
-			text = f'#{i}',
-			command = lambda i=i: enqueue_command(state, {
-				'verb': 'Rotate',
-				'target_syringe': i,
-			}),
+			text = f'#{syringe_number}',
+			command = lambda syringe_number=syringe_number: enqueue_command(
+				state,
+				'Operator',
+				{
+					'verb': 'Rotate',
+					'target_syringe': syringe_number,
+				},
+			),
 		)
 		switch_to_syringe_button.pack(side = 'left')
 		redrawables.append({
@@ -272,10 +276,14 @@ def build_actuator_controls(
 		retract_button = ttk.Button(
 			row,
 			text = f'Retract actuator {distance} mm',
-			command = lambda distance=distance: enqueue_command(state, {
-				'verb': 'Actuate',
-				'relative_mm_required': -distance,
-			}),
+			command = lambda distance=distance: enqueue_command(
+				state,
+				'Operator',
+				{
+					'verb': 'Actuate',
+					'relative_mm_required': -distance,
+				},
+			),
 		)
 		retract_button.grid(row = i, column = 0)
 		redrawables.append({
@@ -294,10 +302,14 @@ def build_actuator_controls(
 		extend_button = ttk.Button(
 			row,
 			text = f'Extend actuator {distance} mm',
-			command = lambda distance=distance: enqueue_command(state, {
-				'verb': 'Actuate',
-				'relative_mm_required': distance,
-			}),
+			command = lambda distance=distance: enqueue_command(
+				state,
+				'Operator',
+				{
+					'verb': 'Actuate',
+					'relative_mm_required': distance,
+				},
+			),
 		)
 		extend_button.grid(row = i, column = 1)
 		redrawables.append({

@@ -11,6 +11,7 @@ from pins import PinMappings
 
 SyringeNumber = Literal[1, 2, 3, 4]
 OnOff = Literal['On', 'Off']
+Enqueuer = Literal['Klipper', 'Operator']
 
 class CommandRotate(TypedDict):
 	verb: Literal['Rotate']
@@ -37,8 +38,9 @@ CommandSpecifics = (
 	| CommandTurnUvLight
 )
 
-class Command(TypedDict):
+class EnqueuedCommand(TypedDict):
 	ordinal: int
+	enqueued_by: Enqueuer
 	enqueued_at: int
 	'''Unix epoch milliseconds'''
 	started_at: NotRequired[int]
@@ -46,11 +48,19 @@ class Command(TypedDict):
 	specifics: CommandSpecifics
 class FinishedCommand(TypedDict):
 	ordinal: int
+	enqueued_by: Enqueuer
 	enqueued_at: int
 	'''Unix epoch milliseconds'''
 	started_at: int
 	finished_at: int
 	specifics: CommandSpecifics
+
+class Request(TypedDict):
+	timestamp: int
+	'''Unix epoch milliseconds'''
+	commands: List[CommandSpecifics]
+class Response(TypedDict):
+	finished_request_timestamp: int
 
 # Basically useEffect
 class Redrawable(TypedDict):
@@ -108,9 +118,10 @@ class GlobalState(TypedDict):
 	actuator_position_mm: float | None
 	plunger_positions_mm: Dict[str, float]
 	'''Distances from fully retracted actuator tip to each plunger's tip'''
-	command_queue: list[Command]
+	command_queue: list[EnqueuedCommand]
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
+	request_watermark: int
 
 def establish_savefolder_path() -> str:
 	if environ.get('XDG_DATA_DIR'):
@@ -124,10 +135,6 @@ def establish_savefolder_path() -> str:
 	savefolder_path = f'{savefolder_base}bioprintly'
 	Path(savefolder_path).mkdir(parents = True, exist_ok = True)
 	return savefolder_path
-
-def establish_savefile_path() -> str:
-	savefolder_path = establish_savefolder_path()
-	return f'{savefolder_path}/state.json'
 
 def save_state_to_disk(state: GlobalState):
 	'''
@@ -181,9 +188,11 @@ def dont_run_multiple_instances_at_once(savefile_process_info: ProcessInfo):
 		exit(1)
 
 def get_initial_global_state() -> GlobalState:
+	savefolder_path = establish_savefolder_path()
 	state: GlobalState = {
 		'nonpersistent': {
-			'savefile_path': establish_savefile_path(),
+			'savefolder_path': savefolder_path,
+			'savefile_path': f'{savefolder_path}/state.json',
 			'savefile_last_write': 0,
 			'gui_root': None,
 			'gui_redrawables': [],
@@ -223,6 +232,7 @@ def get_initial_global_state() -> GlobalState:
 		'command_queue': [],
 		'command_history': [],
 		'next_command_ordinal': 0,
+		'request_watermark': 0,
 	}
 	
 	load_state_from_disk(state)
@@ -248,10 +258,18 @@ def processing_is_allowed_to_be_started(state: GlobalState) -> bool:
 		and state['nonpersistent']['modal'] == None
 	)
 
-def enqueue_command(state: GlobalState, specifics: CommandSpecifics):
+def enqueue_command(
+	state: GlobalState,
+	enqueuer: Enqueuer,
+	specifics: CommandSpecifics,
+) -> int:
+	ordinal = state['next_command_ordinal']
 	state['command_queue'].append({
-		'ordinal': state['next_command_ordinal'],
+		'ordinal': ordinal,
+		'enqueued_by': enqueuer,
 		'enqueued_at': unix_time_ms(),
 		'specifics': specifics,
 	})
 	state['next_command_ordinal'] += 1
+
+	return ordinal
