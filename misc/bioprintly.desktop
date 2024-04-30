@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Bioprintly
+Icon=printer
+Exec=sh -c 'python3 ~/printer_data/scripts/bioprintly/main.py'
+Categories=Network
+Terminal=false

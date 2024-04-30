@@ -1,9 +1,13 @@
 **
 !.gitignore
 !Readme.md
+!config
 config/**
 !config/macros.cfg
 !config/printer.cfg
+!misc
+misc/**
+!misc/bioprintly.desktop
 !scripts
 !scripts/**
 __pycache__/
