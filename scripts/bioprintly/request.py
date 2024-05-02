@@ -5,16 +5,6 @@ import sys
 from time import sleep
 from util import unix_time_ms
 
-def handle_request_from_klipper():
-	savefolder_path = establish_savefolder_path()
-	logfile = open(f'{savefolder_path}/request.log', 'a')
-	logfile.write('Invoked with argv: ' + str(sys.argv) + '\n')
-	logfile.close()
-	commands = build_commands_for_g_code(sys.argv[1])
-	submit_request_to_bioprintly(savefolder_path, commands)
-
-handle_request_from_klipper()
-
 def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 	if g_code == 'M140':
 		for i in range(2, len(sys.argv)):
@@ -107,3 +97,15 @@ def submit_request_to_bioprintly(
 			break
 
 		sleep_briefly()
+
+def handle_request_from_klipper():
+	savefolder_path = establish_savefolder_path()
+	logfile = open(f'{savefolder_path}/request.log', 'a')
+	logfile.write('Invoked with argv: ' + str(sys.argv) + '\n')
+	commands = build_commands_for_g_code(sys.argv[1])
+	logfile.write(f'Built and submitting commands {json.dumps(commands)}')
+	logfile.close()
+	if len(commands) > 0:
+		submit_request_to_bioprintly(savefolder_path, commands)
+
+handle_request_from_klipper()

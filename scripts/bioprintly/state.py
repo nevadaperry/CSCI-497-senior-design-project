@@ -126,6 +126,7 @@ class GlobalState(TypedDict):
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
 	request_handling_watermark: int
+	request_handling_caboose_ordinal: int | None
 
 def on_off_string_to_bit(on_off: OnOff) -> Bit:
 	return 1 if on_off == 'On' else 0
@@ -241,6 +242,7 @@ def get_initial_global_state() -> GlobalState:
 		'command_history': [],
 		'next_command_ordinal': 0,
 		'request_handling_watermark': 0,
+		'request_handling_caboose_ordinal': None,
 	}
 	
 	load_state_from_disk(state)
