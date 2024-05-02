@@ -10,29 +10,54 @@ logfile.write('Invoked with argv: ' + str(sys.argv) + '\n')
 logfile.close()
 
 commands: CommandSpecifics = []
-match sys.argv[1]:
-	case 'M140':
-		for i in [1, 2, 3, 4]:
-			commands.append({
-				'verb': 'Turn heating pad',
-				'target_heating_pad': i,
-				'on_or_off': 'On',
-			})
-	case 'T0':
-		commands.append({ 'verb': 'Rotate', 'target_syringe': 1 })
-	case 'T1':
-		commands.append({ 'verb': 'Rotate', 'target_syringe': 2 })
-	case 'T2':
-		commands.append({ 'verb': 'Rotate', 'target_syringe': 3 })
-	case 'T3':
-		commands.append({ 'verb': 'Rotate', 'target_syringe': 4 })
-	case 'G1':
+g_code = sys.argv[1]
+if g_code == 'M140':
+	for i in range(2, len(sys.argv)):
+		if sys.argv[i][0] == 'S':
+			on_or_off = 'Off' if float(sys.argv[i][1:]) == 0.0 else 'On'
+			break
+	else:
+		return
+	for i in [1, 2, 3, 4]:
 		commands.append({
-			'verb': 'Actuate',
-			'relative_mm_required': 1,
+			'verb': 'Turn heating pad',
+			'target_heating_pad': i,
+			'on_or_off': on_or_off,
 		})
-	case _:
-		raise Exception(f'Unknown G-code {argv[1]} in bioprintly/request.py')
+	commands.append({
+		'verb': 'Turn UV light',
+		'target_uv_light': 'Current one',
+		'on_or_off': on_or_off
+	})
+elif g_code[0] == 'T':
+	commands += [
+		{ 'verb': 'Actuate', 'unscaled_mm_required': 'Go home' },
+		{
+			'verb': 'Turn UV light',
+			'target_uv_light': 'Current one',
+			'on_or_off': 'Off'
+		},
+		{ 'verb': 'Rotate', 'target_syringe': 1 + int(g_code[1:]) },
+		{
+			'verb': 'Turn UV light',
+			'target_uv_light': 'Current one',
+			'on_or_off': 'On'
+		},
+		{ 'verb': 'Actuate', 'unscaled_mm_required': 'Go to plunger flange' },
+	]
+elif g_code == 'G1':
+	for i in range(2, len(sys.argv)):
+		if sys.argv[i][0] == 'E':
+			unscaled_mm_required = float(sys.argv[i][1:])
+			break
+	else:
+		return
+	commands.append({
+		'verb': 'Actuate',
+		'unscaled_mm_required': unscaled_mm_required,
+	})
+else:
+	raise Exception(f'Unknown G-code {argv[1]} in bioprintly/request.py')
 
 request_timestamp = unix_time_ms()
 request: Request = {

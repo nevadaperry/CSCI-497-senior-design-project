@@ -20,8 +20,9 @@ class CommandRotate(TypedDict):
 	relative_degrees_traveled: NotRequired[float]
 class CommandActuate(TypedDict):
 	verb: Literal['Actuate']
-	relative_mm_required: float | Literal["Go home"]
-	relative_mm_traveled: NotRequired[float]
+	unscaled_mm_required: float | Literal["Go home", "Go to plunger flange"]
+	scaled_mm_required: NotRequired[float]
+	scaled_mm_traveled: NotRequired[float]
 class CommandTurnHeatingPad(TypedDict):
 	verb: Literal['Turn heating pad']
 	target_heating_pad: SyringeNumber | Literal['Current one']
@@ -106,6 +107,8 @@ class NonPersistentState(TypedDict):
 	Actuator may be locked during certain calibration steps so that only one
 	calibration related action may be taken at a time.
 	'''
+	actuator_klipper_scaling_factor: float
+	'''Factor to scale actuator commands by for commands coming from Klipper'''
 class ProcessInfo(TypedDict):
 	pid: int
 	ppid: int
@@ -212,6 +215,7 @@ def get_initial_global_state() -> GlobalState:
 			'actuator_travel_mm_per_ms': 12e-3,
 			'actuator_max_possible_extension_mm': 113.3,
 			'actuator_has_calibration_lock': False,
+			'actuator_klipper_scaling_factor': 0.5,
 		},
 		'process_info': { 'pid': os.getpid(), 'ppid': os.getppid() },
 		'ui_scale': 1.0,

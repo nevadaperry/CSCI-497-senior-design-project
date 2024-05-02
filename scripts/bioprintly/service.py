@@ -57,6 +57,7 @@ def process_commands(state: GlobalState):
 	processing_functions[specifics['verb']](
 		state,
 		state['nonpersistent'],
+		active_command,
 		specifics
 	)
 
@@ -72,6 +73,7 @@ def finish_active_task(state: GlobalState):
 def rotate_one_interval(
 	state: GlobalState,
 	nonpersistent: NonPersistentState,
+	active_command: EnqueuedCommand,
 	specifics: CommandRotate,
 ):
 	if not 'relative_degrees_required' in specifics:
@@ -89,10 +91,13 @@ def rotate_one_interval(
 		* 0.5 * nonpersistent['rotator_degrees_per_step']
 	)
 	
-	if this_action_would_put_it_further_away_from_target_than_it_is_now(
-		specifics['relative_degrees_traveled'],
-		expected_travel_degrees,
-		specifics['relative_degrees_required'],
+	if (
+		specifics['relative_degrees_required'] == 0.0
+		or this_action_would_put_it_further_away_from_target_than_it_is_now(
+			specifics['relative_degrees_traveled'],
+			expected_travel_degrees,
+			specifics['relative_degrees_required'],
+		)
 	):
 		state['current_syringe'] = specifics['target_syringe']
 		finish_active_task(state)
@@ -112,26 +117,38 @@ def rotate_one_interval(
 def actuate_one_interval(
 	state: GlobalState,
 	nonpersistent: NonPersistentState,
+	active_command: EnqueuedCommand,
 	specifics: CommandActuate
 ):
-	if not 'relative_mm_traveled' in specifics:
-		specifics['relative_mm_traveled'] = 0
-	if specifics['relative_mm_required'] == 'Go home':
-		specifics['relative_mm_required'] = (
-			cast(float, state['actuator_position_mm'])
-			* (1 + nonpersistent['safety_margin'])
-		) * -1
+	if not 'scaled_mm_required' in specifics:
+		if specifics['unscaled_mm_required'] == 'Go home':
+			specifics['scaled_mm_required'] = (
+				cast(float, state['actuator_position_mm'])
+				* (1 + nonpersistent['safety_margin'])
+				* -1
+			) 
+		else:
+			specifics['scaled_mm_required'] = (
+				specifics['unscaled_mm_required']
+				* (
+					nonpersistent['actuator_klipper_scaling_factor']
+					if active_command['enqueuer'] == 'Klipper'
+					else 1.0
+				)
+			)
+	if not 'scaled_mm_traveled' in specifics:
+		specifics['scaled_mm_traveled'] = 0
 	
 	expected_travel_mm = (
-		signum(specifics['relative_mm_required'])
+		signum(specifics['scaled_mm_required'])
 		* nonpersistent['actuator_travel_mm_per_ms']
 		* nonpersistent['processing_loop_measured_delta']
 	)
 	
 	if this_action_would_put_it_further_away_from_target_than_it_is_now(
-		specifics['relative_mm_traveled'],
+		specifics['scaled_mm_traveled'],
 		expected_travel_mm,
-		specifics['relative_mm_required'],
+		specifics['scaled_mm_required'],
 	):
 		write_pin(state, 'actuator_retract', 0)
 		write_pin(state, 'actuator_extend', 0)
@@ -157,7 +174,7 @@ def actuate_one_interval(
 	else:
 		write_pin(state, 'actuator_retract', 1)
 	
-	specifics['relative_mm_traveled'] += expected_travel_mm
+	specifics['scaled_mm_traveled'] += expected_travel_mm
 	state['actuator_position_mm'] = (
 		cast(float, state['actuator_position_mm'])
 		+ expected_travel_mm

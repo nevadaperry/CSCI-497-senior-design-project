@@ -30,10 +30,11 @@ class PinMappings(TypedDict):
 	uv_light_3: Pin
 	uv_light_4: Pin
 
-try:
-	GPIO = __import__('RPi', fromlist = ['GPIO']).GPIO
-	GPIO.setwarnings(False)
-except:
+#try:
+#	GPIO = __import__('RPi', fromlist = ['GPIO']).GPIO
+#	GPIO.setwarnings(False)
+#except:
+if True:
 	gpio_stub = ({
 		'setmode': lambda mode: None,
 		'BOARD': 0,

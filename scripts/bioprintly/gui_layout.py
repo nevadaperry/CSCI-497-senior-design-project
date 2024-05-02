@@ -281,7 +281,7 @@ def build_actuator_controls(
 				'Operator',
 				{
 					'verb': 'Actuate',
-					'relative_mm_required': -distance,
+					'unscaled_mm_required': -distance,
 				},
 			),
 		)
@@ -307,7 +307,7 @@ def build_actuator_controls(
 				'Operator',
 				{
 					'verb': 'Actuate',
-					'relative_mm_required': distance,
+					'unscaled_mm_required': distance,
 				},
 			),
 		)
