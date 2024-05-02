@@ -157,6 +157,9 @@ def actuate_one_interval(
 	):
 		write_pin(state, 'actuator_retract', 0)
 		write_pin(state, 'actuator_extend', 0)
+		state['plunger_positions_mm'][str(state['current_syringe'])] = (
+			cast(float, state['actuator_position_mm'])
+		)
 		finish_active_task(state)
 		return
 	
