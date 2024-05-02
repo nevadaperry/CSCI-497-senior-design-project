@@ -219,7 +219,7 @@ def get_initial_global_state() -> GlobalState:
 			'request_handling_last_poll': 0,
 			'safety_margin': 0.05,
 			'rotator_degrees_per_step': 90 / 235,
-			'actuator_travel_mm_per_ms': 12e-3,
+			'actuator_travel_mm_per_ms': 8e-3,
 			'actuator_max_possible_extension_mm': 113.3,
 			'actuator_has_calibration_lock': False,
 			'actuator_klipper_scaling_factor': 0.5,
