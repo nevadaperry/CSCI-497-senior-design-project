@@ -20,8 +20,8 @@ class CommandRotate(TypedDict):
 	relative_degrees_traveled: NotRequired[float]
 class CommandActuate(TypedDict):
 	verb: Literal['Actuate']
-	relative_mm_required: float | Literal['Retract fully', 'Go to plunger flange']
 	duration_ms_required: float
+	relative_mm_required: float | Literal['Retract fully', 'Go to plunger flange']
 	relative_mm_traveled: NotRequired[float]
 class CommandTurnHeatingPad(TypedDict):
 	verb: Literal['Turn heating pad']
@@ -218,7 +218,7 @@ def get_initial_global_state() -> GlobalState:
 			'safety_margin': 0.05,
 			'rotator_degrees_per_step': 90 / 235,
 			'actuator_travel_mm_per_ms': 8e-3,
-			'actuator_max_possible_extension_mm': 113.3,
+			'actuator_max_possible_extension_mm': 45.5,
 			'actuator_has_calibration_lock': False,
 		},
 		'process_info': { 'pid': os.getpid(), 'ppid': os.getppid() },

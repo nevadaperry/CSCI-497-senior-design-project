@@ -86,7 +86,7 @@ def rotate_one_interval(
 	if cast(float, state['actuator_position_mm']) > 10.0:
 		state['nonpersistent']['processing_enabled'] = False
 		messagebox.showwarning(
-			message = f'Attempted to rotate barrel but actuator is {state['actuator_position_mm']} mm extended',
+			message = f'Attempted to rotate barrel but actuator is {state["actuator_position_mm"]} mm extended',
 			detail = 'Processing has been paused. Please retract the actuator before attempting rotation.',
 		)
 		return
@@ -96,9 +96,11 @@ def rotate_one_interval(
 			specifics['target_syringe']
 			- cast(SyringeNumber, state['current_syringe'])
 		) * -90.0
-	
 	if not 'relative_degrees_traveled' in specifics:
 		specifics['relative_degrees_traveled'] = 0.0
+	if specifics['relative_degrees_required'] == 0.0:
+		finish_active_task(state)
+		return
 	
 	expected_travel_degrees = (
 		signum(specifics['relative_degrees_required'])
@@ -106,13 +108,10 @@ def rotate_one_interval(
 		* 0.5 * nonpersistent['rotator_degrees_per_step']
 	)
 	
-	if (
-		specifics['relative_degrees_required'] == 0.0
-		or this_action_would_put_it_further_away_from_target_than_it_is_now(
-			specifics['relative_degrees_traveled'],
-			expected_travel_degrees,
-			specifics['relative_degrees_required'],
-		)
+	if this_action_would_put_it_further_away_from_target_than_it_is_now(
+		specifics['relative_degrees_traveled'],
+		expected_travel_degrees,
+		specifics['relative_degrees_required'],
 	):
 		state['current_syringe'] = specifics['target_syringe']
 		finish_active_task(state)
@@ -147,7 +146,10 @@ def actuate_one_interval(
 			- cast(float, state['actuator_position_mm'])
 		)
 	if not 'relative_mm_traveled' in specifics:
-		specifics['relative_mm_traveled'] = 0
+		specifics['relative_mm_traveled'] = 0.0
+	if specifics['relative_mm_required'] == 0.0:
+		finish_active_task(state)
+		return
 	
 	duration_ms_at_full_power = (
 		abs(specifics['relative_mm_required'])
@@ -167,13 +169,10 @@ def actuate_one_interval(
 		* pwm_on_percent
 	)
 	
-	if (
-		specifics['relative_mm_required'] == 0.0
-		or this_action_would_put_it_further_away_from_target_than_it_is_now(
-			specifics['relative_mm_traveled'],
-			expected_travel_mm,
-			specifics['relative_mm_required'],
-		)
+	if this_action_would_put_it_further_away_from_target_than_it_is_now(
+		specifics['relative_mm_traveled'],
+		expected_travel_mm,
+		specifics['relative_mm_required'],
 	):
 		write_pin(state, 'actuator_retract', 0)
 		write_pin(state, 'actuator_extend', 0)

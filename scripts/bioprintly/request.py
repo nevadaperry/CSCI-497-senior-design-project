@@ -14,18 +14,24 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 				break
 		else:
 			return []
-		commands = []
+		commands = [
+			{
+				'verb': 'Actuate',
+				'duration_ms_required': 0.0,
+				'relative_mm_required': 'Retract fully',
+			},
+			{
+				'verb': 'Turn UV light',
+				'target_uv_light': 'Current one',
+				'on_or_off': on_or_off
+			},
+		]
 		for i in get_args(SyringeNumber):
 			commands.append({
 				'verb': 'Turn heating pad',
 				'target_heating_pad': i,
 				'on_or_off': on_or_off,
 			})
-		commands.append({
-			'verb': 'Turn UV light',
-			'target_uv_light': 'Current one',
-			'on_or_off': on_or_off
-		})
 		return commands
 	elif g_code[0] == 'T':
 		target_syringe = 1 + int(g_code[1:])
@@ -35,8 +41,8 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 		return [
 			{
 				'verb': 'Actuate',
-				'relative_mm_required': 'Retract fully',
 				'duration_ms_required': 0.0,
+				'relative_mm_required': 'Retract fully',
 			},
 			{
 				'verb': 'Turn UV light',
@@ -52,10 +58,13 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 				'target_uv_light': 'Current one',
 				'on_or_off': 'On'
 			},
+		]
+	elif g_code == 'M83':
+		return [
 			{
 				'verb': 'Actuate',
-				'relative_mm_required': 'Go to plunger flange',
 				'duration_ms_required': 0.0,
+				'relative_mm_required': 'Go to plunger flange',
 			},
 		]
 	elif g_code == 'G1':
@@ -95,6 +104,7 @@ def sleep_briefly():
 
 def submit_request_to_bioprintly(
 	savefolder_path: str,
+	g_code: str,
 	commands: List[CommandSpecifics],
 ):
 	request_timestamp = unix_time_ms()
@@ -108,6 +118,9 @@ def submit_request_to_bioprintly(
 		indent = '\t',
 	)
 
+	if g_code == 'G1':
+		return
+
 	while True:
 		try:
 			response: Response = json.load(open(
@@ -118,7 +131,7 @@ def submit_request_to_bioprintly(
 			sleep_briefly()
 			continue
 
-		if response['completed_request_timestamp'] == request_timestamp:
+		if response['completed_request_timestamp'] >= request_timestamp:
 			break
 
 		sleep_briefly()
@@ -127,10 +140,12 @@ def handle_request_from_klipper():
 	savefolder_path = establish_savefolder_path()
 	logfile = open(f'{savefolder_path}/request.log', 'a')
 	logfile.write('Invoked with argv: ' + str(sys.argv) + '\n')
-	commands = build_commands_for_g_code(sys.argv[1])
+
+	g_code = sys.argv[1]
+	commands = build_commands_for_g_code(g_code)
 	logfile.write(f'Built and submitting commands {json.dumps(commands)}')
 	logfile.close()
 	if len(commands) > 0:
-		submit_request_to_bioprintly(savefolder_path, commands)
+		submit_request_to_bioprintly(savefolder_path, g_code, commands)
 
 handle_request_from_klipper()

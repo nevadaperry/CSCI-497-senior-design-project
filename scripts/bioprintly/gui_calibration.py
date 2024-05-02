@@ -449,7 +449,6 @@ def handcrank_the_actuator(state: GlobalState, relative_mm_required: float):
 		
 		if cast(float, state['actuator_position_mm']) < 0:
 			state['actuator_position_mm'] = 0
-			break
 		
 		if this_action_would_put_it_further_away_from_target_than_it_is_now(
 			relative_mm_traveled,
