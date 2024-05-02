@@ -1,8 +1,6 @@
 import json
-from state import GlobalState, Request, Response, CommandSpecifics, enqueue_command
+from state import GlobalState, Request, Response, enqueue_command
 from time import sleep
-from typing import List
-from util import unix_time_ms
 
 def sleep_briefly():
 	sleep(0.2)
@@ -12,7 +10,9 @@ def handle_requests_repeatedly(state: GlobalState):
 	while state['nonpersistent']['shutting_down'] == False:
 		if command_with_caboose_ordinal_is_complete(state):
 			response: Response = {
-				'completed_request_timestamp': request['timestamp'],
+				'completed_request_timestamp': state[
+					'request_handling_watermark'
+				],
 			}
 			json.dump(
 				response,

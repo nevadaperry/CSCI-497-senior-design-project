@@ -132,7 +132,7 @@ def actuate_one_interval(
 		elif specifics['unscaled_mm_required'] == 'Go to plunger flange':
 			specifics['scaled_mm_required'] = (
 				state['plunger_positions_mm'][str(state['current_syringe'])]
-				- state['actuator_position_mm']
+				- cast(float, state['actuator_position_mm'])
 			)
 		else:
 			specifics['scaled_mm_required'] = (
