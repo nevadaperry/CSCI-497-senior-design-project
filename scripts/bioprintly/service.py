@@ -83,7 +83,7 @@ def rotate_one_interval(
 	active_command: EnqueuedCommand,
 	specifics: CommandRotate,
 ):
-	if state['actuator_position_mm'] > 10.0:
+	if cast(float, state['actuator_position_mm']) > 10.0:
 		state['nonpersistent']['processing_enabled'] = False
 		messagebox.showwarning(
 			message = f'Attempted to rotate barrel but actuator is {state['actuator_position_mm']} mm extended',
@@ -150,10 +150,10 @@ def actuate_one_interval(
 		specifics['relative_mm_traveled'] = 0
 	
 	duration_ms_at_full_power = (
-		specifics['relative_mm_required']
+		abs(specifics['relative_mm_required'])
 		/ nonpersistent['actuator_travel_mm_per_ms']
 	)
-	if duration_ms_at_full_power > specifics['duration_ms_required']:
+	if duration_ms_at_full_power >= specifics['duration_ms_required']:
 		pwm_on_percent = 1.0
 	else:
 		pwm_on_percent = (
@@ -164,7 +164,7 @@ def actuate_one_interval(
 		signum(specifics['relative_mm_required'])
 		* nonpersistent['actuator_travel_mm_per_ms']
 		* nonpersistent['processing_loop_measured_delta']
-		* specifics['pwm_on_percent']
+		* pwm_on_percent
 	)
 	
 	if (

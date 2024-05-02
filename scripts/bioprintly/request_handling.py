@@ -41,7 +41,7 @@ def handle_requests(state: GlobalState):
 		state['request_handling_caboose_ordinal'] = caboose_ordinal
 		state['request_handling_watermark'] = request['timestamp']
 	
-	state['request_handling_last_poll'] = unix_time_ms()
+	state['nonpersistent']['request_handling_last_poll'] = unix_time_ms()
 
 
 def command_with_caboose_ordinal_is_complete(state) -> bool:

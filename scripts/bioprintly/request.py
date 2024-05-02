@@ -35,8 +35,9 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 		return [
 			{
 				'verb': 'Actuate',
-				'relative_mm_required': 'Retract fully' },
+				'relative_mm_required': 'Retract fully',
 				'duration_ms_required': 0.0,
+			},
 			{
 				'verb': 'Turn UV light',
 				'target_uv_light': 'Current one',
