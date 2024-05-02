@@ -86,6 +86,7 @@ class NonPersistentState(TypedDict):
 	processing_loop_last_start: int
 	processing_loop_measured_delta: int
 	processing_loop_interval_ms: int
+	request_handling_last_poll: int
 	safety_margin: float
 	'''
 	General-purpose safety margin for any operation that would physically crash
@@ -215,6 +216,7 @@ def get_initial_global_state() -> GlobalState:
 			'processing_loop_interval_ms': 8,
 			'processing_loop_measured_delta': 8,
 			'processing_loop_last_start': unix_time_ms(),
+			'request_handling_last_poll': 0,
 			'safety_margin': 0.05,
 			'rotator_degrees_per_step': 90 / 235,
 			'actuator_travel_mm_per_ms': 12e-3,

@@ -1,6 +1,7 @@
 from tkinter import messagebox
 from typing import Any, Callable, Dict, cast
 from pins import flip_bit, read_pin, write_pin, zero_out_pins
+from request_handling import handle_requests
 from state import CommandActuate, CommandRotate, CommandSpecifics, CommandTurnHeatingPad, CommandTurnUvLight, EnqueuedCommand, FinishedCommand, GlobalState, NonPersistentState, SyringeNumber, on_off_string_to_bit, save_state_to_disk, calibration_is_complete
 from time import sleep
 from util import signum, this_action_would_put_it_further_away_from_target_than_it_is_now, unix_time_ms
@@ -13,6 +14,9 @@ def run_service(state: GlobalState):
 		)
 		nonpersistent['processing_loop_last_start'] = unix_time_ms()
 		
+		if unix_time_ms() >= nonpersistent['request_handling_last_poll'] + 200:
+			handle_requests(state)
+			
 		if nonpersistent['processing_enabled'] == True:
 			process_commands(state)
 		
@@ -68,7 +72,7 @@ def finish_active_task(state: GlobalState):
 	state['command_history'].append(
 		cast(FinishedCommand, state['command_queue'][0])
 	)
-	state['command_history'] = state['command_history'][:50]
+	state['command_history'] = state['command_history'][-50:]
 	state['command_queue'] = state['command_queue'][1:]
 	save_state_to_disk(state)
 
