@@ -1,7 +1,7 @@
 from tkinter import messagebox
 from typing import Any, Callable, Dict, cast
 from pins import flip_bit, read_pin, write_pin, zero_out_pins
-from state import CommandActuate, CommandRotate, CommandSpecifics, FinishedCommand, GlobalState, NonPersistentState, SyringeNumber, save_state_to_disk, calibration_is_complete
+from state import CommandActuate, CommandRotate, CommandSpecifics, CommandTurnHeatingPad, CommandTurnUvLight, EnqueuedCommand, FinishedCommand, GlobalState, NonPersistentState, SyringeNumber, on_off_string_to_bit, save_state_to_disk, calibration_is_complete
 from time import sleep
 from util import signum, this_action_would_put_it_further_away_from_target_than_it_is_now, unix_time_ms
 
@@ -46,10 +46,12 @@ def process_commands(state: GlobalState):
 	specifics = active_command['specifics']
 	processing_functions: Dict[
 		str,
-		Callable[[GlobalState, NonPersistentState, Any], None]
+		Callable[[GlobalState, NonPersistentState, EnqueuedCommand, Any], None]
 	] = {
 		'Rotate': rotate_one_interval,
 		'Actuate': actuate_one_interval,
+		'Turn heating pad': turn_heating_pad,
+		'Turn UV light': turn_uv_light,
 	}
 	if not specifics['verb'] in processing_functions:
 		raise Exception(f"Tried to process unknown command {specifics['verb']}")
@@ -126,13 +128,13 @@ def actuate_one_interval(
 				cast(float, state['actuator_position_mm'])
 				* (1 + nonpersistent['safety_margin'])
 				* -1
-			) 
+			)
 		else:
 			specifics['scaled_mm_required'] = (
-				specifics['unscaled_mm_required']
+				cast(float, specifics['unscaled_mm_required'])
 				* (
 					nonpersistent['actuator_klipper_scaling_factor']
-					if active_command['enqueuer'] == 'Klipper'
+					if active_command['enqueued_by'] == 'Klipper'
 					else 1.0
 				)
 			)
@@ -145,10 +147,13 @@ def actuate_one_interval(
 		* nonpersistent['processing_loop_measured_delta']
 	)
 	
-	if this_action_would_put_it_further_away_from_target_than_it_is_now(
-		specifics['scaled_mm_traveled'],
-		expected_travel_mm,
-		specifics['scaled_mm_required'],
+	if (
+		specifics['scaled_mm_required'] == 0.0
+		or this_action_would_put_it_further_away_from_target_than_it_is_now(
+			specifics['scaled_mm_traveled'],
+			expected_travel_mm,
+			specifics['scaled_mm_required'],
+		)
 	):
 		write_pin(state, 'actuator_retract', 0)
 		write_pin(state, 'actuator_extend', 0)
@@ -186,3 +191,39 @@ def actuate_one_interval(
 		write_pin(state, 'actuator_extend', 0)
 		finish_active_task(state)
 		return
+
+def turn_heating_pad(
+	state: GlobalState,
+	nonpersistent: NonPersistentState,
+	active_command: EnqueuedCommand,
+	specifics: CommandTurnHeatingPad,
+):
+	target_heating_pad = (
+		state['current_syringe']
+		if specifics['target_heating_pad'] == 'Current one'
+		else specifics['target_heating_pad']
+	)
+	write_pin(
+		state,
+		f'heating_pad_{target_heating_pad}',
+		on_off_string_to_bit(specifics['on_or_off']),
+	)
+	finish_active_task(state)
+
+def turn_uv_light(
+	state: GlobalState,
+	nonpersistent: NonPersistentState,
+	active_command: EnqueuedCommand,
+	specifics: CommandTurnUvLight
+):
+	target_uv_light = (
+		state['current_syringe']
+		if specifics['target_uv_light'] == 'Current one'
+		else specifics['target_uv_light']
+	)
+	write_pin(
+		state,
+		f'uv_light_{target_uv_light}',
+		on_off_string_to_bit(specifics['on_or_off']),
+	)
+	return

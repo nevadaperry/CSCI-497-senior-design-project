@@ -7,7 +7,7 @@ import subprocess
 from tkinter import Tk, Toplevel, messagebox
 from typing import Any, Callable, Dict, List, Literal, NotRequired, TypedDict, cast, get_args
 from util import unix_time_ms
-from pins import PinMappings
+from pins import Bit, PinMappings
 
 SyringeNumber = Literal[1, 2, 3, 4]
 OnOff = Literal['On', 'Off']
@@ -70,6 +70,7 @@ class Redrawable(TypedDict):
 	redraw: Callable[[], Any]
 
 class NonPersistentState(TypedDict):
+	savefolder_path: str
 	savefile_path: str
 	savefile_last_write: int
 	gui_root: Tk | None
@@ -125,6 +126,9 @@ class GlobalState(TypedDict):
 	command_history: list[FinishedCommand]
 	next_command_ordinal: int
 	request_handling_watermark: int
+
+def on_off_string_to_bit(on_off: OnOff) -> Bit:
+	return 1 if on_off == 'On' else 0
 
 def establish_savefolder_path() -> str:
 	if environ.get('XDG_DATA_DIR'):

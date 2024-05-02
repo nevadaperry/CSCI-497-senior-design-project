@@ -5,7 +5,7 @@ from typing import List
 from util import unix_time_ms
 
 def sleep_briefly():
-	sleep(0.1)
+	sleep(0.2)
 
 def handle_requests_repeatedly(state: GlobalState):
 	savefolder_path = state['nonpersistent']['savefolder_path']
