@@ -1,4 +1,5 @@
 import json
+import math
 from typing import List, cast, get_args
 from state import SyringeNumber, establish_savefolder_path, Request, Response, CommandSpecifics
 import sys
@@ -32,15 +33,19 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 			raise Exception(f'T-code {g_code} out of range in bioprintly/request.py')
 		target_syringe = cast(SyringeNumber, target_syringe)
 		return [
-			{ 'verb': 'Actuate', 'unscaled_mm_required': 'Go home' },
+			{
+				'verb': 'Actuate',
+				'relative_mm_required': 'Retract fully' },
+				'duration_ms_required': 0.0,
 			{
 				'verb': 'Turn UV light',
 				'target_uv_light': 'Current one',
-				'on_or_off': 'Off'
+				'on_or_off': 'Off',
 			},
 			{
 				'verb': 'Rotate',
-				'target_syringe': target_syringe },
+				'target_syringe': target_syringe,
+			},
 			{
 				'verb': 'Turn UV light',
 				'target_uv_light': 'Current one',
@@ -48,19 +53,38 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 			},
 			{
 				'verb': 'Actuate',
-				'unscaled_mm_required': 'Go to plunger flange'
+				'relative_mm_required': 'Go to plunger flange',
+				'duration_ms_required': 0.0,
 			},
 		]
 	elif g_code == 'G1':
+		relative_mm_required = 0.0
+		x_travel_mm = 0.0
+		y_travel_mm = 0.0
+		z_travel_mm = 0.0
+		feedrate_mm_per_ms = 0.0
 		for i in range(2, len(sys.argv)):
 			if sys.argv[i][0] == 'E':
-				unscaled_mm_required = float(sys.argv[i][1:])
-				break
-		else:
+				relative_mm_required = float(sys.argv[i][1:])
+			if sys.argv[i][0] == 'X':
+				x_travel_mm = float(sys.argv[i][1:])
+			if sys.argv[i][0] == 'Y':
+				y_travel_mm = float(sys.argv[i][1:])
+			if sys.argv[i][0] == 'Y':
+				z_travel_mm = float(sys.argv[i][1:])
+			if sys.argv[i][0] == 'F':
+				feedrate_mm_per_ms = float(sys.argv[i][1:]) / 60.0 / 1000.0
+		if relative_mm_required == 0.0 or feedrate_mm_per_ms == 0.0:
 			return []
+		diagonal_travel_mm = math.sqrt(
+			x_travel_mm ** 2
+			+ y_travel_mm ** 2
+			+ z_travel_mm ** 2
+		)
 		return [{
 			'verb': 'Actuate',
-			'unscaled_mm_required': unscaled_mm_required,
+			'relative_mm_required': relative_mm_required,
+			'duration_ms_required': diagonal_travel_mm / feedrate_mm_per_ms,
 		}]
 	else:
 		raise Exception(f'Unknown G-code {sys.argv[1]} in bioprintly/request.py')

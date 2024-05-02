@@ -2,6 +2,7 @@ from tkinter import messagebox
 from typing import Any, Callable, Dict, cast
 from pins import flip_bit, read_pin, write_pin, zero_out_pins
 from request_handling import handle_requests
+import random
 from state import CommandActuate, CommandRotate, CommandSpecifics, CommandTurnHeatingPad, CommandTurnUvLight, EnqueuedCommand, FinishedCommand, GlobalState, NonPersistentState, SyringeNumber, on_off_string_to_bit, save_state_to_disk, calibration_is_complete
 from time import sleep
 from util import signum, this_action_would_put_it_further_away_from_target_than_it_is_now, unix_time_ms
@@ -82,6 +83,14 @@ def rotate_one_interval(
 	active_command: EnqueuedCommand,
 	specifics: CommandRotate,
 ):
+	if state['actuator_position_mm'] > 10.0:
+		state['nonpersistent']['processing_enabled'] = False
+		messagebox.showwarning(
+			message = f'Attempted to rotate barrel but actuator is {state['actuator_position_mm']} mm extended',
+			detail = 'Processing has been paused. Please retract the actuator before attempting rotation.',
+		)
+		return
+		
 	if not 'relative_degrees_required' in specifics:
 		specifics['relative_degrees_required'] = (
 			specifics['target_syringe']
@@ -126,42 +135,44 @@ def actuate_one_interval(
 	active_command: EnqueuedCommand,
 	specifics: CommandActuate
 ):
-	if not 'scaled_mm_required' in specifics:
-		if specifics['unscaled_mm_required'] == 'Go home':
-			specifics['scaled_mm_required'] = (
-				cast(float, state['actuator_position_mm'])
-				* (1 + nonpersistent['safety_margin'])
-				* -1
-			)
-		elif specifics['unscaled_mm_required'] == 'Go to plunger flange':
-			specifics['scaled_mm_required'] = (
-				state['plunger_positions_mm'][str(state['current_syringe'])]
-				- cast(float, state['actuator_position_mm'])
-			)
-		else:
-			specifics['scaled_mm_required'] = (
-				cast(float, specifics['unscaled_mm_required'])
-				* (
-					nonpersistent['actuator_klipper_scaling_factor']
-					if active_command['enqueued_by'] == 'Klipper'
-					else 1.0
-				)
-			)
-	if not 'scaled_mm_traveled' in specifics:
-		specifics['scaled_mm_traveled'] = 0
+	if specifics['relative_mm_required'] == 'Retract fully':
+		specifics['relative_mm_required'] = (
+			cast(float, state['actuator_position_mm'])
+			* (1 + nonpersistent['safety_margin'])
+			* -1
+		)
+	elif specifics['relative_mm_required'] == 'Go to plunger flange':
+		specifics['relative_mm_required'] = (
+			state['plunger_positions_mm'][str(state['current_syringe'])]
+			- cast(float, state['actuator_position_mm'])
+		)
+	if not 'relative_mm_traveled' in specifics:
+		specifics['relative_mm_traveled'] = 0
 	
+	duration_ms_at_full_power = (
+		specifics['relative_mm_required']
+		/ nonpersistent['actuator_travel_mm_per_ms']
+	)
+	if duration_ms_at_full_power > specifics['duration_ms_required']:
+		pwm_on_percent = 1.0
+	else:
+		pwm_on_percent = (
+			duration_ms_at_full_power / specifics['duration_ms_required']
+		)
+
 	expected_travel_mm = (
-		signum(specifics['scaled_mm_required'])
+		signum(specifics['relative_mm_required'])
 		* nonpersistent['actuator_travel_mm_per_ms']
 		* nonpersistent['processing_loop_measured_delta']
+		* specifics['pwm_on_percent']
 	)
 	
 	if (
-		specifics['scaled_mm_required'] == 0.0
+		specifics['relative_mm_required'] == 0.0
 		or this_action_would_put_it_further_away_from_target_than_it_is_now(
-			specifics['scaled_mm_traveled'],
+			specifics['relative_mm_traveled'],
 			expected_travel_mm,
-			specifics['scaled_mm_required'],
+			specifics['relative_mm_required'],
 		)
 	):
 		write_pin(state, 'actuator_retract', 0)
@@ -185,13 +196,18 @@ def actuate_one_interval(
 			detail = 'To continue, open the calibration window, home the actuator, and re-calibrate the current syringe to a position where it has more material.',
 		)
 		return
+
+	pwm_value = (
+		0 if random.uniform(0.0, 1.0) > pwm_on_percent
+		else 1
+	)
 	
-	if expected_travel_mm > 0:
-		write_pin(state, 'actuator_extend', 1)
+	if signum(specifics['relative_mm_required']) == 1:
+		write_pin(state, 'actuator_extend', pwm_value)
 	else:
-		write_pin(state, 'actuator_retract', 1)
+		write_pin(state, 'actuator_retract', pwm_value)
 	
-	specifics['scaled_mm_traveled'] += expected_travel_mm
+	specifics['relative_mm_traveled'] += expected_travel_mm
 	state['actuator_position_mm'] = (
 		cast(float, state['actuator_position_mm'])
 		+ expected_travel_mm
