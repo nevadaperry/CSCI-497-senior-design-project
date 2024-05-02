@@ -129,6 +129,11 @@ def actuate_one_interval(
 				* (1 + nonpersistent['safety_margin'])
 				* -1
 			)
+		elif specifics['unscaled_mm_required'] == 'Go to plunger flange':
+			specifics['scaled_mm_required'] = (
+				state['plunger_positions_mm'][str(state['current_syringe'])]
+				- state['actuator_position_mm']
+			)
 		else:
 			specifics['scaled_mm_required'] = (
 				cast(float, specifics['unscaled_mm_required'])
@@ -229,4 +234,4 @@ def turn_uv_light(
 		f'uv_light_{target_uv_light}',
 		on_off_string_to_bit(specifics['on_or_off']),
 	)
-	return
+	finish_active_task(state)

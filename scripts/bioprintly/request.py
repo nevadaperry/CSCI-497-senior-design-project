@@ -29,7 +29,7 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 	elif g_code[0] == 'T':
 		target_syringe = 1 + int(g_code[1:])
 		if not target_syringe in get_args(SyringeNumber):
-			raise Exception(f'')
+			raise Exception(f'T-code {g_code} out of range in bioprintly/request.py')
 		target_syringe = cast(SyringeNumber, target_syringe)
 		return [
 			{ 'verb': 'Actuate', 'unscaled_mm_required': 'Go home' },
