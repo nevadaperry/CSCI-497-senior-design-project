@@ -1,0 +1,41 @@
+; Use millimeters
+G21
+
+; Set bed temp and turn on heating pads
+M140 S1
+; Home xyz
+G28
+
+T2
+
+G90
+G0 Y160 F5000
+G0 X50 Z10 F5000
+G0 Z2 F500
+M83
+G2 I-1 F300 E2
+G4 S2
+G0 Z10 F500
+
+G90
+G0 Y160 F5000
+G0 X70 Z10 F5000
+G0 Z2 F500
+M83
+G2 I1 F300 E2
+G4 S2
+G0 Z10 F500
+
+G90
+G0 Y140 F5000
+G0 X45 Z10 F5000
+G0 Z2 F500
+M83
+G3 X75 I-15 J30 F300 E2
+G4 S2
+G0 Z10 F500
+
+;T1
+
+; Set bed temp and turn off heating pads
+M140 S0

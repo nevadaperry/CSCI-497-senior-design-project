@@ -2,7 +2,7 @@
 G21
 
 ; Set bed temp and turn on heating pads
-M140 S27
+M140 S1
 ; Home xyz
 G28
 
