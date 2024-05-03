@@ -23,7 +23,7 @@ def build_commands_for_g_code(g_code: str) -> List[CommandSpecifics]:
 			{
 				'verb': 'Turn UV light',
 				'target_uv_light': 'Current one',
-				'on_or_off': on_or_off
+				'on_or_off': on_or_off,
 			},
 		]
 		for i in get_args(SyringeNumber):
